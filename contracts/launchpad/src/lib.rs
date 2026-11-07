@@ -367,17 +367,21 @@ pub(crate) fn spot_e18(t: &TokenState) -> u128 {
 
 /// Coins of `t` sitting in the curve or pool on this contract (not counting vault positions).
 pub(crate) fn market_inventory(t: &TokenState) -> u128 {
+    if on_curve(t) { t.tok_reserve.0 - (VIRTUAL_TOKENS - SUPPLY) } else { t.tok_reserve.0 }
+}
+
+/// Whether the market still runs on the bonding curve (virtual reserves). A token being merged keeps the kind
+/// of market it had: one that never opened a pool was on the curve.
+pub(crate) fn on_curve(t: &TokenState) -> bool {
     match t.phase {
-        Phase::Curve | Phase::Deploying => t.tok_reserve.0 - (VIRTUAL_TOKENS - SUPPLY),
-        _ => t.tok_reserve.0,
+        Phase::Curve | Phase::Deploying => true,
+        Phase::Merging => t.pool_open_near.0 == 0,
+        _ => false,
     }
 }
 
 /// Real NEAR backing the market: raised on the curve or the pool's reserve.
 pub(crate) fn market_near(t: &TokenState) -> u128 {
-    match t.phase {
-        Phase::Curve | Phase::Deploying => t.near_reserve.0 - VIRTUAL_NEAR,
-        _ => t.near_reserve.0,
-    }
+    if on_curve(t) { t.near_reserve.0 - VIRTUAL_NEAR } else { t.near_reserve.0 }
 }
 
