@@ -3,8 +3,8 @@
 import type { Env } from '../env'
 import { body, clean, fail, json, sha256Hex } from '../http'
 import { base64Encode } from '../near/encoding'
+import { getFile, maxFileBytes, putFile } from '../lib/blobs'
 
-const MAX_IMG = 2 * 1024 * 1024
 const EXT: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' }
 
 /** Real image bytes, not just a claimed type: check the file signature. */
@@ -36,17 +36,14 @@ export function socialUrl(v: unknown, kind: 'x' | 'telegram' | 'website'): strin
   }
 }
 
-async function putOnce(env: Env, key: string, bytes: Uint8Array, type: string) {
-  if (await env.FILES.head(key)) return
-  await env.FILES.put(key, bytes, { httpMetadata: { contentType: type, cacheControl: 'public, max-age=31536000, immutable' } })
-}
+const putOnce = putFile
 
 export async function upload(req: Request, env: Env): Promise<Response> {
   const form = await req.formData()
   const f = form.get('file')
   if (!f || typeof f === 'string') fail(400, 'no file')
   const file = f as unknown as File
-  if (file.size > MAX_IMG) fail(413, 'the picture is larger than 2 MB')
+  if (file.size > maxFileBytes(env)) fail(413, `the picture is larger than ${(maxFileBytes(env) / 1e6).toFixed(1)} MB`)
   const bytes = new Uint8Array(await file.arrayBuffer())
   const type = sniff(bytes) ?? fail(415, 'only PNG, JPEG, GIF or WebP')
   const key = `img/${await sha256Hex(bytes)}.${EXT[type]}`
@@ -79,11 +76,11 @@ export async function meta(req: Request, env: Env): Promise<Response> {
 
 export async function file(key: string, env: Env): Promise<Response> {
   if (!/^(img\/[0-9a-f]{64}\.(png|jpg|gif|webp)|meta\/[0-9a-f]{64}\.json)$/.test(key)) fail(404, 'not found')
-  const obj = await env.FILES.get(key)
+  const obj = await getFile(env, key)
   if (!obj) fail(404, 'not found')
-  return new Response(obj!.body, {
+  return new Response(obj!.bytes, {
     headers: {
-      'Content-Type': obj!.httpMetadata?.contentType || 'application/octet-stream',
+      'Content-Type': obj!.type,
       'Cache-Control': 'public, max-age=31536000, immutable',
       'Access-Control-Allow-Origin': '*',
       'X-Content-Type-Options': 'nosniff',

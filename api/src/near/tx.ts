@@ -12,7 +12,7 @@ export interface KeyPair {
 
 /** Accepts NEAR's "ed25519:<base58>" secret format (64 bytes seed+public, or a 32-byte seed). */
 export function parseKey(s: string): KeyPair {
-  const [type, data] = s.split(':')
+  const [type, data] = s.trim().split(':')
   if (type !== 'ed25519' || !data) throw new Error('only ed25519 keys are supported')
   const raw = base58Decode(data)
   const secret = raw.length === 64 ? raw.slice(0, 32) : raw

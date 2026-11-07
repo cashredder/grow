@@ -90,3 +90,47 @@ new_sqlite_classes = ["Clock", "Hub"]
 
 [env.production.triggers]
 crons = ["* * * * *"]
+
+# ---------------------------------------------------------------- testnet (workers.dev, no custom domain)
+# scripts/testnet.sh fills LAUNCHPAD, RELAYER, HOUSE_FUNDER, PUBLIC_URL, START_BLOCK and the database id.
+[env.testnet]
+name = "grow-api-testnet"
+workers_dev = true
+
+[env.testnet.vars]
+NETWORK = "testnet"
+RPC_URL = "https://rpc.testnet.fastnear.com,https://near-testnet.drpc.org,https://rpc.testnet.near.org,https://test.rpc.fastnear.com"
+NEARDATA_URL = "https://testnet.neardata.xyz"
+TX_API_URL = "https://tx.test.fastnear.com"
+LAUNCHPAD = "growpad.testnet"
+RELAYER = "growpad-relayer.testnet"
+HOUSE_FUNDER = "growpad-house.testnet"
+PUBLIC_URL = "https://grow-api-testnet.grow-api.workers.dev"
+ALLOWED_ORIGINS = "http://127.0.0.1:5174,http://127.0.0.1:5173"
+START_BLOCK = "276668000"
+NEAR_USD_FALLBACK = "2.5"
+CLOCK_EVERY_MS = "2000"
+AGENTS_ENABLED = "true"
+HOUSE_BUDGET_NEAR = "5"
+
+[[env.testnet.d1_databases]]
+binding = "DB"
+database_name = "grow-testnet"
+database_id = "8f7d1247-030b-41ad-918c-fc79534f8ebb"
+
+# No R2 on testnet: uploads are stored in D1 (src/lib/blobs.ts).
+
+[[env.testnet.durable_objects.bindings]]
+name = "CLOCK"
+class_name = "Clock"
+
+[[env.testnet.durable_objects.bindings]]
+name = "HUB"
+class_name = "Hub"
+
+[[env.testnet.migrations]]
+tag = "v1"
+new_sqlite_classes = ["Clock", "Hub"]
+
+[env.testnet.triggers]
+crons = ["* * * * *"]

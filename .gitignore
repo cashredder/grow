@@ -4,3 +4,5 @@ target/
 .wrangler/
 .dev.vars
 *.key
+.tools/
+.env

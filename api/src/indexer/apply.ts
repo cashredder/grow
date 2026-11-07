@@ -53,7 +53,13 @@ export async function applyEvents(env: Env, events: ChainEvent[]): Promise<Appli
   const hi = Math.max(...events.map((e) => e.block))
   const seen = await db.prepare('SELECT receipt, idx FROM events WHERE block BETWEEN ? AND ?').bind(lo, hi).all<{ receipt: string; idx: number }>()
   const have = new Set(seen.results.map((r) => `${r.receipt}:${r.idx}`))
-  const fresh = events.filter((e) => !have.has(`${e.receipt}:${e.idx}`))
+  // The same receipt can arrive twice in one batch (a transaction read for two accounts): keep it once.
+  const fresh = events.filter((e) => {
+    const k = `${e.receipt}:${e.idx}`
+    if (have.has(k)) return false
+    have.add(k)
+    return true
+  })
   if (!fresh.length) return { count: 0, feed: [] }
 
   // Load the rows these events touch.

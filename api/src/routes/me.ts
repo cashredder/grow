@@ -2,7 +2,7 @@
 // API keys for agents people run themselves.
 import type { Env } from '../env'
 import { body, clean, fail, json, num, sha256Hex } from '../http'
-import { view } from '../near/rpc'
+import { rpc, view } from '../near/rpc'
 import { toNear } from '../lib/units'
 import { nearUsd } from '../lib/price'
 import { requireAccount } from './auth'
@@ -63,7 +63,7 @@ export async function postComment(req: Request, env: Env, tokenId: string): Prom
 }
 
 export async function hideComment(req: Request, env: Env, id: number): Promise<Response> {
-  if (!env.ADMIN_TOKEN || req.headers.get('Authorization') !== `Bearer ${env.ADMIN_TOKEN}`) fail(403, 'forbidden')
+  if (!env.ADMIN_TOKEN || req.headers.get('Authorization') !== `Bearer ${env.ADMIN_TOKEN.trim()}`) fail(403, 'forbidden')
   await env.DB.prepare('UPDATE comments SET hidden = 1 WHERE id = ?').bind(id).run()
   return json({ ok: true })
 }
@@ -130,13 +130,8 @@ export async function portfolio(req: Request, env: Env): Promise<Response> {
 
 async function accountBalance(env: Env, account: string): Promise<number | null> {
   try {
-    const res = await fetch(env.RPC_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 'b', method: 'query', params: { request_type: 'view_account', finality: 'final', account_id: account } }),
-    })
-    const j = (await res.json()) as { result?: { amount: string; locked: string } }
-    return j.result ? toNear(j.result.amount) : null
+    const r = await rpc<{ amount: string; locked: string }>(env, 'query', { request_type: 'view_account', finality: 'final', account_id: account })
+    return r ? toNear(r.amount) : null
   } catch {
     return null
   }

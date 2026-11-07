@@ -130,3 +130,6 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE INDEX IF NOT EXISTS jobs_status ON jobs (status, id);
 
 CREATE TABLE IF NOT EXISTS prices (key TEXT PRIMARY KEY, value REAL NOT NULL, ts INTEGER NOT NULL);
+
+-- Files when no R2 bucket is bound (see src/lib/blobs.ts).
+CREATE TABLE IF NOT EXISTS files (key TEXT PRIMARY KEY, type TEXT NOT NULL, data BLOB NOT NULL, ts INTEGER NOT NULL);

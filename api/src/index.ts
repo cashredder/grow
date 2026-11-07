@@ -107,13 +107,27 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   }
 
   if (seg[0] === 'admin') {
-    if (!env.ADMIN_TOKEN || req.headers.get('Authorization') !== `Bearer ${env.ADMIN_TOKEN}`) fail(403, 'forbidden')
+    if (!env.ADMIN_TOKEN || req.headers.get('Authorization') !== `Bearer ${env.ADMIN_TOKEN.trim()}`) fail(403, 'forbidden')
     if (m === 'DELETE' && seg[1] === 'comments' && seg[2]) return hideComment(req, env, Number(seg[2]))
     if (m === 'GET' && seg[1] === 'status') {
       const state = await env.DB.prepare("SELECT key, value FROM ix_state WHERE key IN ('block', 'indexed_at') OR key LIKE 'error:%'").all()
       const jobs = await env.DB.prepare('SELECT status, COUNT(*) AS n FROM jobs GROUP BY status').all()
       const failed = await env.DB.prepare("SELECT id, method, error, updated FROM jobs WHERE status = 'failed' ORDER BY id DESC LIMIT 20").all()
-      return json({ state: state.results, jobs: jobs.results, failed: failed.results })
+      return json({ source: env.TX_API_URL ? 'accounts' : 'blocks', state: state.results, jobs: jobs.results, failed: failed.results })
+    }
+    if (m === 'GET' && seg[1] === 'probe') {
+      // Which public endpoints answer from this worker (they limit shared Cloudflare addresses differently).
+      const urls = (new URL(req.url).searchParams.get('urls') || '').split(',').filter((u) => u.startsWith('https://')).slice(0, 8)
+      const out: Record<string, string> = {}
+      for (const u of urls) {
+        try {
+          const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'block', params: { finality: 'final' } }) })
+          out[u] = `${r.status} ${(await r.text()).slice(0, 60)}`
+        } catch (e) {
+          out[u] = String(e)
+        }
+      }
+      return json(out)
     }
     if (m === 'POST' && seg[1] === 'wind') {
       await env.CLOCK.get(env.CLOCK.idFromName('clock')).fetch('https://clock/wind')

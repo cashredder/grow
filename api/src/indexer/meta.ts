@@ -1,6 +1,7 @@
 // Fills a token's picture, description and links from its metadata file. Only files this API stored are read
 // (content-addressed under /f/meta/), so a token cannot make the API fetch arbitrary URLs.
 import type { Env } from '../env'
+import { getFile } from '../lib/blobs'
 
 const SOCIAL = {
   x: /^https:\/\/x\.com\/[A-Za-z0-9_]{1,15}$/,
@@ -33,10 +34,10 @@ export async function fillMeta(env: Env): Promise<void> {
     const key = metaKey(env, t.reference)
     let m: TokenMeta = {}
     if (key) {
-      const obj = await env.FILES.get(key)
+      const obj = await getFile(env, key)
       if (obj) {
         try {
-          m = JSON.parse(await obj.text()) as TokenMeta
+          m = JSON.parse(new TextDecoder().decode(obj.bytes)) as TokenMeta
         } catch {
           m = {}
         }

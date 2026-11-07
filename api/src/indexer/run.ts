@@ -2,6 +2,7 @@ import type { Env } from '../env'
 import { applyEvents, type Applied } from './apply'
 import { type ChainEvent, extractEvents, type NeardataBlock } from './events'
 import { fillMeta } from './meta'
+import { readAccounts, TOKENS_PER_RUN } from './txsource'
 
 const BATCH = 8 // blocks fetched in parallel per step
 const MAX_STEPS = 6 // steps per run; the clock runs again a moment later
@@ -33,6 +34,7 @@ async function lastFinal(env: Env): Promise<number> {
 
 /** Reads new blocks and applies their events. Returns what changed, for the live feed. */
 export async function runIndexer(env: Env): Promise<Applied & { height: number; behind: number }> {
+  if (env.TX_API_URL) return runByAccounts(env)
   let cursor = Number((await getState(env, 'block')) ?? env.START_BLOCK)
   const tip = await lastFinal(env)
   if (!cursor) cursor = tip - 1
@@ -51,4 +53,30 @@ export async function runIndexer(env: Env): Promise<Applied & { height: number; 
   await setState(env, 'indexed_at', String(Date.now()))
   if (all.count) await fillMeta(env).catch(() => {})
   return { ...all, height: cursor, behind: tip - cursor }
+}
+
+/** The per-account way (see txsource.ts): the launchpad every run, and a few token accounts in turn. */
+async function runByAccounts(env: Env): Promise<Applied & { height: number; behind: number }> {
+  const start = Number(env.START_BLOCK) || 0
+  const lpCursor = Number((await getState(env, 'block')) ?? start)
+  const turn = Number((await getState(env, 'token_turn')) ?? 0)
+  const toks = await env.DB.prepare('SELECT account FROM tokens ORDER BY created_ts LIMIT ? OFFSET ?').bind(TOKENS_PER_RUN, turn).all<{ account: string }>().catch(() => ({ results: [] as { account: string }[] }))
+  const accounts = [{ account: env.LAUNCHPAD, cursor: lpCursor }]
+  for (const k of toks.results) accounts.push({ account: k.account, cursor: Number((await getState(env, `acct:${k.account}`)) ?? start) })
+  const r = await readAccounts(env, accounts)
+  const events: ChainEvent[] = []
+  for (const b of r.blocks) events.push(...extractEvents(b, env.LAUNCHPAD))
+  const all = await applyEvents(env, events)
+  // Move each cursor only if nobody changed it meanwhile (an admin reset during this run wins).
+  const before = new Map(accounts.map((a) => [a.account, a.cursor]))
+  for (const [acct, c] of r.cursors) {
+    const key = acct === env.LAUNCHPAD ? 'block' : `acct:${acct}`
+    const was = String(before.get(acct))
+    await env.DB.prepare('INSERT INTO ix_state (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value WHERE ix_state.value = ?').bind(key, String(c), was).run()
+  }
+  await setState(env, 'token_turn', String(toks.results.length < TOKENS_PER_RUN ? 0 : turn + TOKENS_PER_RUN))
+  await setState(env, 'indexed_at', String(Date.now()))
+  if (all.count) await fillMeta(env).catch(() => {})
+  const height = r.cursors.find(([a]) => a === env.LAUNCHPAD)?.[1] ?? lpCursor
+  return { ...all, height, behind: r.tip - height }
 }

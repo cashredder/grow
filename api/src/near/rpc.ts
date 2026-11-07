@@ -2,12 +2,37 @@ import type { Env } from '../env'
 import { base58Decode, base64Encode } from './encoding'
 import { type FunctionCall, type KeyPair, signTransaction } from './tx'
 
-async function rpc<T>(env: Env, method: string, params: unknown): Promise<T> {
-  const res = await fetch(env.RPC_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 'grow', method, params }),
-  })
+// RPC_URL may list several endpoints, comma-separated. Public endpoints limit shared Cloudflare addresses, so
+// a refused or failing request goes to the next one. Sending a signed transaction twice is safe: the chain
+// accepts a given nonce once.
+let preferred = 0
+
+export async function rpc<T>(env: Env, method: string, params: unknown): Promise<T> {
+  const urls = env.RPC_URL.split(',').map((s) => s.trim()).filter(Boolean)
+  let res: Response | null = null
+  let last = ''
+  for (let i = 0; i < urls.length; i++) {
+    const k = (preferred + i) % urls.length
+    try {
+      res = await fetch(urls[k], {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 'grow', method, params }),
+      })
+    } catch (e) {
+      last = String(e)
+      res = null
+      continue
+    }
+    if (res.status === 429 || res.status >= 500) {
+      last = `HTTP ${res.status}`
+      res = null
+      continue
+    }
+    preferred = k
+    break
+  }
+  if (!res) throw new Error(`rpc ${method}: ${last || 'no endpoint'}`)
   if (!res.ok) throw new Error(`rpc ${method}: HTTP ${res.status}`)
   const j = (await res.json()) as { result?: T; error?: { message?: string; data?: unknown; cause?: { name?: string } } }
   if (j.error) throw new Error(`rpc ${method}: ${j.error.cause?.name || j.error.message || 'error'} ${JSON.stringify(j.error.data ?? '')}`)

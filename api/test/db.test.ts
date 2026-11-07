@@ -50,7 +50,8 @@ describe('indexing and reading', () => {
       ft('oak-1', 'ft_transfer', { old_owner_id: LP, new_owner_id: 'alice.testnet', amount: toks(30_000_000) }, T0 + 1_000, 2),
       g('referral', { account_id: 'alice.testnet', referrer: 'ref.testnet' }, T0 + 1_000, 2),
     ]
-    const r = await applyEvents(env, events)
+    // The same receipt twice in one batch (read for two accounts) is applied once.
+    const r = await applyEvents(env, [...events, events[2], events[4]])
     expect(r.count).toBe(events.length)
     // Applying the same block again changes nothing.
     expect((await applyEvents(env, events)).count).toBe(0)

@@ -1,12 +1,15 @@
 export interface Env {
   DB: D1Database
-  FILES: R2Bucket
+  /** Optional: without R2, files go to the `files` table in D1. */
+  FILES?: R2Bucket
   CLOCK: DurableObjectNamespace
   HUB: DurableObjectNamespace
 
   NETWORK: string
   RPC_URL: string
   NEARDATA_URL: string
+  /** FastNEAR transaction API; when set, events are read per account instead of per block. */
+  TX_API_URL?: string
   LAUNCHPAD: string
   RELAYER: string
   HOUSE_FUNDER: string
