@@ -417,3 +417,96 @@ fn quote_matches_execution() {
     let f = fill_buy(&t, ONE_NEAR, 100, 100);
     assert!(f.out > 0);
 }
+
+// ---------------------------------------------------------------- quick trading
+
+#[test]
+fn quick_buy_pays_from_the_balance_like_a_wallet_buy() {
+    let mut l = setup();
+    let id = launch(&mut l, "dev.near", "OAK", false, T0);
+    let ms = T0 + 120_000;
+    at("alice.near", ms, 20 * ONE_NEAR);
+    assert_eq!(l.deposit_trade().0, 20 * ONE_NEAR);
+    let before = l.token(&id).tok_reserve.0;
+    at("alice.near", ms, 0);
+    l.quick_buy(id.clone(), U128(10 * ONE_NEAR + STORAGE_DEPOSIT), U128(0), None);
+    let got_quick = before - l.token(&id).tok_reserve.0;
+    assert_eq!(l.trade_balance_of(a("alice.near")).0, 10 * ONE_NEAR - STORAGE_DEPOSIT);
+
+    // The same buy from a wallet on a fresh launchpad gets the same coins.
+    let mut w = setup();
+    let id2 = launch(&mut w, "dev.near", "OAK", false, T0);
+    assert_eq!(buy(&mut w, "alice.near", &id2, 10, ms), got_quick);
+}
+
+#[test]
+#[should_panic(expected = "not enough on your trading balance")]
+fn quick_buy_cannot_spend_more_than_the_balance() {
+    let mut l = setup();
+    let id = launch(&mut l, "dev.near", "OAK", false, T0);
+    at("alice.near", T0 + 120_000, ONE_NEAR);
+    l.deposit_trade();
+    at("alice.near", T0 + 120_000, 0);
+    l.quick_buy(id, U128(2 * ONE_NEAR), U128(0), None);
+}
+
+#[test]
+fn a_capped_quick_buy_returns_the_rest_to_the_balance() {
+    let mut l = setup();
+    let id = launch(&mut l, "dev.near", "OAK", false, T0);
+    let ms = T0 + 120_000;
+    at("whale.near", ms, 5_000 * ONE_NEAR);
+    l.deposit_trade();
+    at("whale.near", ms, 0);
+    l.quick_buy(id.clone(), U128(5_000 * ONE_NEAR), U128(0), None);
+    assert_eq!(l.token(&id).phase, Phase::Pool);
+    let left = l.trade_balance_of(a("whale.near")).0;
+    assert!(left > 1_000 * ONE_NEAR && left < 2_000 * ONE_NEAR, "rest of a capped buy: {left}");
+}
+
+#[test]
+fn a_quick_sell_pays_into_the_balance() {
+    let mut l = setup();
+    let id = launch(&mut l, "dev.near", "OAK", false, T0);
+    let ms = T0 + 120_000;
+    let got = buy(&mut l, "alice.near", &id, 10, ms);
+    assert_eq!(l.trade_balance_of(a("alice.near")).0, 0);
+    let account = l.token(&id).account.clone();
+    at(account.as_str(), ms + 1, 0);
+    let _ = l.ft_on_transfer(a("alice.near"), U128(got), r#"{"action":"sell","min_out":"0","to_balance":true}"#.into());
+    let bal = l.trade_balance_of(a("alice.near")).0;
+    assert!(bal > 9 * ONE_NEAR && bal < 10 * ONE_NEAR, "sell proceeds: {bal}");
+}
+
+#[test]
+fn quick_sell_asks_the_token_for_the_signers_coins_only() {
+    let mut l = setup();
+    let id = launch(&mut l, "dev.near", "OAK", false, T0);
+    at("alice.near", T0 + 120_000, 0);
+    // Builds a promise to the token's launchpad_sell for alice; nothing changes here until the token calls back.
+    let _ = l.quick_sell(id.clone(), U128(ONE_TOKEN), U128(0));
+    assert_eq!(l.trade_balance_of(a("alice.near")).0, 0);
+}
+
+#[test]
+fn withdrawing_needs_the_wallet_and_empties_the_balance() {
+    let mut l = setup();
+    at("alice.near", T0, 3 * ONE_NEAR);
+    l.deposit_trade();
+    at("alice.near", T0, 1);
+    let _ = l.withdraw_trade(Some(U128(ONE_NEAR)));
+    assert_eq!(l.trade_balance_of(a("alice.near")).0, 2 * ONE_NEAR);
+    at("alice.near", T0, 1);
+    let _ = l.withdraw_trade(None);
+    assert_eq!(l.trade_balance_of(a("alice.near")).0, 0);
+}
+
+#[test]
+#[should_panic(expected = "Requires attached deposit of exactly 1 yoctoNEAR")]
+fn a_limited_key_cannot_withdraw() {
+    let mut l = setup();
+    at("alice.near", T0, 3 * ONE_NEAR);
+    l.deposit_trade();
+    at("alice.near", T0, 0);
+    let _ = l.withdraw_trade(None);
+}

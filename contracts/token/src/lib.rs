@@ -369,6 +369,26 @@ impl Token {
         self.transfer(&lp, &receiver_id, amount.0, Some(since_day), Some("crossing".into()));
     }
 
+    /// Quick trading: sells the holder's coins through the launchpad. The launchpad calls this only from
+    /// `quick_sell`, which the holder signs themselves (with a key limited to the launchpad), so it moves coins
+    /// exactly like the holder's own `ft_transfer_call` to the launchpad, refunds included.
+    pub fn launchpad_sell(&mut self, owner_id: AccountId, amount: U128, msg: String) -> PromiseOrValue<U128> {
+        require!(env::predecessor_account_id() == self.launchpad, "launchpad only");
+        require!(env::prepaid_gas() > GAS_FOR_TRANSFER_CALL, "more gas is needed");
+        let lp = self.launchpad.clone();
+        self.transfer(&owner_id, &lp, amount.0, None, Some("quick sell".into()));
+        ext_ft_receiver::ext(lp.clone())
+            .with_static_gas(env::prepaid_gas().saturating_sub(GAS_FOR_TRANSFER_CALL))
+            .ft_on_transfer(owner_id.clone(), amount, msg)
+            .then(Self::ext(env::current_account_id()).with_static_gas(GAS_FOR_RESOLVE).ft_resolve_transfer(owner_id, lp, amount))
+            .into()
+    }
+
+    /// 2: has `launchpad_sell` (quick trading). Older tokens have no such method.
+    pub fn grow_token_version(&self) -> u32 {
+        2
+    }
+
     // ---------------------------------------------------------------- internals
 
     fn is_excluded(&self, a: &AccountId) -> bool {

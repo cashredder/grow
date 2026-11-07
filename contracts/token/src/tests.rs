@@ -198,3 +198,25 @@ fn burns_reduce_supply() {
     t.burn(U128(5 * ONE_TOKEN));
     assert_eq!(t.ft_total_supply().0, SUPPLY - 5 * ONE_TOKEN);
 }
+
+#[test]
+fn launchpad_sell_moves_the_holders_coins_to_the_launchpad() {
+    let mut t = setup();
+    register(&mut t, "alice.near", 0);
+    give(&mut t, "alice.near", 1_000, 0);
+    at("grow.near", 1, 0);
+    let _ = t.launchpad_sell(acc("alice.near"), U128(400 * ONE_TOKEN), r#"{"action":"sell","min_out":"0","to_balance":true}"#.into());
+    assert_eq!(t.ft_balance_of(acc("alice.near")).0, 600 * ONE_TOKEN);
+    assert_eq!(t.ft_balance_of(acc("grow.near")).0, SUPPLY - 600 * ONE_TOKEN);
+    assert_eq!(t.grow_token_version(), 2);
+}
+
+#[test]
+#[should_panic(expected = "launchpad only")]
+fn only_the_launchpad_can_sell_for_a_holder() {
+    let mut t = setup();
+    register(&mut t, "alice.near", 0);
+    give(&mut t, "alice.near", 1_000, 0);
+    at("mallory.near", 1, 0);
+    let _ = t.launchpad_sell(acc("alice.near"), U128(400 * ONE_TOKEN), "{}".into());
+}

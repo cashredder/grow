@@ -207,7 +207,7 @@ export async function handleV1(req: Request, env: Env, url: URL): Promise<Respon
     const account = decodeURIComponent(parts[1])
     if (!isAccount(account)) fail(400, 'bad account')
     const profile = await db.prepare('SELECT account, bio, avatar, x, tg, discord FROM profiles WHERE account = ?').bind(account).first()
-    const held = await db.prepare(`SELECT ${TOKEN_FIELDS.split(',').map((f) => 'k.' + f.trim()).join(', ')}, b.balance FROM balances b JOIN tokens k ON k.id = b.token_id WHERE b.account = ? AND b.balance > 0 ORDER BY b.balance * k.price DESC LIMIT 50`).bind(account).all<Token>()
+    const held = await db.prepare(`SELECT ${TOKEN_FIELDS.split(',').map((f) => 'k.' + f.trim()).join(', ')}, b.balance, b.first_ts AS held_since FROM balances b JOIN tokens k ON k.id = b.token_id WHERE b.account = ? AND b.balance > 0 ORDER BY b.balance * k.price DESC LIMIT 50`).bind(account).all<Token>()
     const created = await db.prepare(`SELECT ${TOKEN_FIELDS} FROM tokens WHERE (creator = ? OR co_dev = ?) AND phase != 'Deploying' ORDER BY created_ts DESC LIMIT 50`).bind(account, account).all<Token>()
     return json({ profile: profile ?? { account, bio: '', avatar: null }, held: await withSparks(env, held.results), created: await withSparks(env, created.results) })
   }

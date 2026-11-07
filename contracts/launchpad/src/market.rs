@@ -42,7 +42,13 @@ pub(crate) struct Fill {
 #[near(serializers = [json])]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum FtMsg {
-    Sell { min_out: U128, referrer: Option<AccountId> },
+    Sell {
+        min_out: U128,
+        referrer: Option<AccountId>,
+        /// Quick trading: the NEAR goes to the seller's trading balance instead of their wallet.
+        #[serde(default)]
+        to_balance: bool,
+    },
     Convert,
 }
 
@@ -99,6 +105,31 @@ impl Launchpad {
     pub fn buy(&mut self, token_id: String, min_out: U128, referrer: Option<AccountId>) -> Promise {
         let buyer = env::predecessor_account_id();
         let attached = env::attached_deposit().as_yoctonear();
+        self.buy_core(&token_id, &buyer, attached, min_out.0, referrer, false)
+    }
+
+    /// Selling and converting arrive as `ft_transfer_call` from a token contract.
+    pub fn ft_on_transfer(&mut self, sender_id: AccountId, amount: U128, msg: String) -> PromiseOrValue<U128> {
+        let token_account = env::predecessor_account_id();
+        let id = self.id_of(&token_account);
+        let msg: FtMsg = serde_json::from_str(&msg).unwrap_or_else(|_| env::panic_str("bad message"));
+        self.registered.insert(reg_key(&id, &sender_id));
+        match msg {
+            FtMsg::Sell { min_out, referrer, to_balance } => {
+                self.sell_in(&id, &sender_id, amount.0, min_out.0, referrer, to_balance);
+                PromiseOrValue::Value(U128(0))
+            }
+            FtMsg::Convert => self.convert_in(&id, &sender_id, amount.0),
+        }
+    }
+}
+
+impl Launchpad {
+    /// A buy paid with `attached` NEAR: from the wallet (`buy`) or from the trading balance (`quick_buy`).
+    /// Change and a capped buy's rest go back where the money came from.
+    pub(crate) fn buy_core(&mut self, token_id: &str, buyer: &AccountId, attached: u128, min_out: u128, referrer: Option<AccountId>, from_balance: bool) -> Promise {
+        let buyer = buyer.clone();
+        let token_id = token_id.to_string();
         let mut t = self.token(&token_id);
         require!(matches!(t.phase, Phase::Curve | Phase::Pool), "this token is not trading");
         let storage = if self.registered.contains(&reg_key(&token_id, &buyer)) { 0 } else { STORAGE_DEPOSIT };
@@ -111,33 +142,22 @@ impl Launchpad {
         let (rate, normal) = rates(&self.config, &t, now);
         let f = fill_buy(&t, amount, rate, normal);
         require!(f.out > 0, "amount is too small");
-        require!(f.out >= min_out.0, "price moved past your slippage limit");
+        require!(f.out >= min_out, "price moved past your slippage limit");
         self.apply_buy(&mut t, &f, now);
         let referred = self.distribute(&mut t, f.fee, f.rate_bps, f.normal_bps, &buyer);
         self.trade_event(&t, &buyer, "buy", f.used, f.out, &f, referred.as_ref(), None);
         self.put_token(t.clone());
         if f.used < amount {
-            Promise::new(buyer.clone()).transfer(NearToken::from_yoctonear(amount - f.used)).detach();
+            if from_balance {
+                self.balance_add(&buyer, amount - f.used, "change");
+            } else {
+                Promise::new(buyer.clone()).transfer(NearToken::from_yoctonear(amount - f.used)).detach();
+            }
         }
         self.send_tokens(&t, &buyer, f.out, storage > 0)
     }
 
-    /// Selling and converting arrive as `ft_transfer_call` from a token contract.
-    pub fn ft_on_transfer(&mut self, sender_id: AccountId, amount: U128, msg: String) -> PromiseOrValue<U128> {
-        let token_account = env::predecessor_account_id();
-        let id = self.id_of(&token_account);
-        let msg: FtMsg = serde_json::from_str(&msg).unwrap_or_else(|_| env::panic_str("bad message"));
-        self.registered.insert(reg_key(&id, &sender_id));
-        match msg {
-            FtMsg::Sell { min_out, referrer } => {
-                self.sell_in(&id, &sender_id, amount.0, min_out.0, referrer);
-                PromiseOrValue::Value(U128(0))
-            }
-            FtMsg::Convert => self.convert_in(&id, &sender_id, amount.0),
-        }
-    }
-
-    fn sell_in(&mut self, id: &str, seller: &AccountId, amount: u128, min_out: u128, referrer: Option<AccountId>) {
+    fn sell_in(&mut self, id: &str, seller: &AccountId, amount: u128, min_out: u128, referrer: Option<AccountId>, to_balance: bool) {
         let mut t = self.token(id);
         require!(t.phase != Phase::Merged, "this token was crossed: convert it instead");
         require!(matches!(t.phase, Phase::Curve | Phase::Pool), "this token is not trading");
@@ -153,8 +173,16 @@ impl Launchpad {
         let referred = self.distribute(&mut t, f.fee, f.rate_bps, f.normal_bps, seller);
         self.trade_event(&t, seller, "sell", f.out, amount, &f, referred.as_ref(), None);
         self.put_token(t);
-        Promise::new(seller.clone()).transfer(NearToken::from_yoctonear(f.out)).detach();
+        if to_balance {
+            self.balance_add(seller, f.out, "sell");
+        } else {
+            Promise::new(seller.clone()).transfer(NearToken::from_yoctonear(f.out)).detach();
+        }
     }
+}
+
+#[near]
+impl Launchpad {
 
     pub fn quote_buy(&self, token_id: String, amount: U128) -> QuoteView {
         let t = self.token(&token_id);

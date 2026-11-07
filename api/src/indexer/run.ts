@@ -56,11 +56,29 @@ export async function runIndexer(env: Env): Promise<Applied & { height: number; 
 }
 
 /** The per-account way (see txsource.ts): the launchpad every run, and a few token accounts in turn. */
+const TOKENS_EVERY_MS = 10_000 // token accounts (transfers between holders) are read less often
+const PAUSE_MS = 10_000 // after the transaction API refuses a request
+
 async function runByAccounts(env: Env): Promise<Applied & { height: number; behind: number }> {
+  const now = Date.now()
+  const lpCursor0 = Number((await getState(env, 'block')) ?? (Number(env.START_BLOCK) || 0))
+  if (Number((await getState(env, 'pause_until')) ?? 0) > now) return { count: 0, feed: [], height: lpCursor0, behind: 0 }
+  try {
+    return await readByAccounts(env, now)
+  } catch (e) {
+    if (/HTTP 429/.test(String((e as Error).message))) await setState(env, 'pause_until', String(now + PAUSE_MS))
+    throw e
+  }
+}
+
+async function readByAccounts(env: Env, now: number): Promise<Applied & { height: number; behind: number }> {
   const start = Number(env.START_BLOCK) || 0
   const lpCursor = Number((await getState(env, 'block')) ?? start)
   const turn = Number((await getState(env, 'token_turn')) ?? 0)
-  const toks = await env.DB.prepare('SELECT account FROM tokens ORDER BY created_ts LIMIT ? OFFSET ?').bind(TOKENS_PER_RUN, turn).all<{ account: string }>().catch(() => ({ results: [] as { account: string }[] }))
+  const tokensDue = Number((await getState(env, 'tokens_at')) ?? 0) + TOKENS_EVERY_MS <= now
+  const toks = tokensDue
+    ? await env.DB.prepare('SELECT account FROM tokens ORDER BY created_ts LIMIT ? OFFSET ?').bind(TOKENS_PER_RUN, turn).all<{ account: string }>().catch(() => ({ results: [] as { account: string }[] }))
+    : { results: [] as { account: string }[] }
   const accounts = [{ account: env.LAUNCHPAD, cursor: lpCursor }]
   for (const k of toks.results) accounts.push({ account: k.account, cursor: Number((await getState(env, `acct:${k.account}`)) ?? start) })
   const r = await readAccounts(env, accounts)
@@ -74,7 +92,10 @@ async function runByAccounts(env: Env): Promise<Applied & { height: number; behi
     const was = String(before.get(acct))
     await env.DB.prepare('INSERT INTO ix_state (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value WHERE ix_state.value = ?').bind(key, String(c), was).run()
   }
-  await setState(env, 'token_turn', String(toks.results.length < TOKENS_PER_RUN ? 0 : turn + TOKENS_PER_RUN))
+  if (tokensDue) {
+    await setState(env, 'token_turn', String(toks.results.length < TOKENS_PER_RUN ? 0 : turn + TOKENS_PER_RUN))
+    await setState(env, 'tokens_at', String(now))
+  }
   await setState(env, 'indexed_at', String(Date.now()))
   if (all.count) await fillMeta(env).catch(() => {})
   const height = r.cursors.find(([a]) => a === env.LAUNCHPAD)?.[1] ?? lpCursor
