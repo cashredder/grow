@@ -239,26 +239,23 @@ fn vault_trades_within_limits_and_is_fired_at_30_percent() {
     let mut l = setup();
     let id = launch(&mut l, "dev.near", "OAK", false, T0);
     let ms = T0 + 120_000;
-    buy(&mut l, "seed.near", &id, 500, ms);
+    let seed_coins = buy(&mut l, "seed.near", &id, 500, ms);
     at("owner.near", ms, 100 * ONE_NEAR);
     let vid = l.create_house_vault("Oak".into(), "trend".into(), U128(80 * ONE_NEAR));
     at("relayer.near", ms + 1, 0);
-    l.vault_trade(vid, id.clone(), true, U128(60 * ONE_NEAR), U128(0), Some("Volume is rising".into()));
+    l.vault_trade(vid, id.clone(), true, U128(80 * ONE_NEAR), U128(0), Some("Volume is rising".into()));
     let v = l.get_vault(vid).unwrap();
-    assert_eq!(v.vault.cash.0, 40 * ONE_NEAR);
+    assert_eq!(v.vault.cash.0, 20 * ONE_NEAR);
     assert_eq!(v.vault.status, VaultStatus::Active);
     assert_eq!(l.token(&id).vault_held.0, v.vault.positions[0].amount.0);
-    // A big seller pushes the price down; anyone can then fire the vault.
-    let seed_coins = 300_000_000 * ONE_TOKEN;
-    sell(&mut l, "seed.near", &id, seed_coins.min(VIRTUAL_TOKENS - l.token(&id).tok_reserve.0 - v.vault.positions[0].amount.0), ms + 2);
+    // The early buyer dumps everything: the vault's coins lose about 45%, its equity about 37%.
+    sell(&mut l, "seed.near", &id, seed_coins, ms + 2);
     at("anyone.near", ms + 3, 0);
     let status = l.check_vault(vid);
     let v = l.get_vault(vid).unwrap();
-    if v.drawdown_bps >= 3_000 {
-        assert_eq!(status, VaultStatus::Fired);
-    } else {
-        assert_eq!(status, VaultStatus::Active);
-    }
+    assert!(v.drawdown_bps >= 3_000, "drawdown {}", v.drawdown_bps);
+    assert_eq!(status, VaultStatus::Fired);
+    assert_eq!(v.vault.status, VaultStatus::Fired);
 }
 
 #[test]

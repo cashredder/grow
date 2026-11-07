@@ -1,3 +1,4 @@
+/// <reference types="node" />
 // End-to-end against a real local D1 (via wrangler's platform proxy): contract events in, API answers out.
 import { readFileSync } from 'node:fs'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -30,7 +31,7 @@ beforeAll(async () => {
   proxy = await getPlatformProxy({ configPath: 'wrangler.toml', persist: false })
   env = { ...(proxy.env as unknown as Env), LAUNCHPAD: LP, NEAR_USD_FALLBACK: '2.5' }
   const sql = readFileSync('schema.sql', 'utf8').replace(/--.*$/gm, '')
-  for (const stmt of sql.split(';').map((s) => s.trim()).filter(Boolean)) await env.DB.prepare(stmt).run()
+  for (const stmt of sql.split(';').map((s: string) => s.trim()).filter(Boolean)) await env.DB.prepare(stmt).run()
 }, 60_000)
 
 afterAll(async () => {
