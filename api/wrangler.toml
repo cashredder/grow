@@ -1,0 +1,92 @@
+# grow. API: Cloudflare Worker + D1 + R2 + two Durable Objects (the clock that indexes and runs agents, and the
+# live feed). Local values below; production overrides under [env.production]. Secrets (never in this file):
+#   wrangler secret put RELAYER_KEY       --env production   # ed25519:... function-call key of the relayer account
+#   wrangler secret put HOUSE_FUNDER_KEY  --env production   # optional: full-access key of the house-funder account
+#   wrangler secret put ADMIN_TOKEN       --env production   # moderation and admin endpoints
+#   wrangler secret put SESSION_SALT      --env production   # random string, salts IP hashes and API keys
+name = "grow-api"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+NETWORK = "testnet"
+RPC_URL = "https://rpc.testnet.near.org"
+NEARDATA_URL = "https://testnet.neardata.xyz"
+LAUNCHPAD = "grow.testnet"
+RELAYER = "relayer.grow.testnet"
+HOUSE_FUNDER = ""
+PUBLIC_URL = "http://127.0.0.1:8788"
+ALLOWED_ORIGINS = "http://127.0.0.1:5173,http://localhost:5173"
+START_BLOCK = "0"
+NEAR_USD_FALLBACK = "2.5"
+CLOCK_EVERY_MS = "2000"
+AGENTS_ENABLED = "true"
+HOUSE_BUDGET_NEAR = "100"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "grow"
+database_id = "00000000-0000-0000-0000-000000000000"
+
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "grow-files"
+
+[[durable_objects.bindings]]
+name = "CLOCK"
+class_name = "Clock"
+
+[[durable_objects.bindings]]
+name = "HUB"
+class_name = "Hub"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Clock", "Hub"]
+
+[triggers]
+crons = ["* * * * *"]
+
+[env.production]
+name = "grow-api"
+routes = [{ pattern = "api.grow.example", custom_domain = true }]
+
+[env.production.vars]
+NETWORK = "mainnet"
+RPC_URL = "https://rpc.mainnet.near.org"
+NEARDATA_URL = "https://mainnet.neardata.xyz"
+LAUNCHPAD = "grow.near"
+RELAYER = "relayer.grow.near"
+HOUSE_FUNDER = "house.grow.near"
+PUBLIC_URL = "https://api.grow.example"
+ALLOWED_ORIGINS = "https://grow.example"
+START_BLOCK = "0"
+NEAR_USD_FALLBACK = "2.5"
+CLOCK_EVERY_MS = "2000"
+AGENTS_ENABLED = "true"
+HOUSE_BUDGET_NEAR = "100"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "grow"
+database_id = "00000000-0000-0000-0000-000000000000"
+
+[[env.production.r2_buckets]]
+binding = "FILES"
+bucket_name = "grow-files"
+
+[[env.production.durable_objects.bindings]]
+name = "CLOCK"
+class_name = "Clock"
+
+[[env.production.durable_objects.bindings]]
+name = "HUB"
+class_name = "Hub"
+
+[[env.production.migrations]]
+tag = "v1"
+new_sqlite_classes = ["Clock", "Hub"]
+
+[env.production.triggers]
+crons = ["* * * * *"]
