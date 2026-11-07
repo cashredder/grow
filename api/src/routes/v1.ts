@@ -9,7 +9,7 @@ import { sessionAccount } from './auth'
 
 const TOKEN_FIELDS = `id, account, name, ticker, creator, co_dev, split_bps, image, description, x, telegram, website, fee_bps, redirect_pct, redirect_to,
   dev_vault, phase, price, mcap, progress, volume, trades, holders, dev_fees, holder_fees, burned_tokens, created_ts, graduated_ts, last_trade_ts,
-  merged_into, parents, crossing_id`
+  merged_into, parents, crossing_id, near_reserve_raw, tok_reserve_raw, burned_raw`
 
 const SPARK_POINTS = 40
 const SNIPE_MS = 60_000

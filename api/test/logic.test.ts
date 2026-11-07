@@ -4,6 +4,7 @@ import { decide, type MarketToken, remember, type VaultSnapshot } from '../src/a
 import { marketFigures, nearRaw, priceFromE18, toNear, VIRTUAL_NEAR, VIRTUAL_TOKENS } from '../src/lib/units'
 import { sniff, socialUrl } from '../src/routes/files'
 import { cleanHandle, LINK_RULES } from '../src/routes/me'
+import { num } from '../src/http'
 
 const LP = 'grow.near'
 
@@ -54,6 +55,15 @@ describe('units', () => {
     expect(start.mcap).toBeCloseTo((1200 / 1.073e9) * 1e9, 3)
     expect(priceFromE18((10n ** 24n * 10n ** 18n) / 10n ** 18n)).toBe(1e-6 * 1e6 * 1)
     expect(toNear(nearRaw(12.345678))).toBe(12.345678)
+  })
+})
+
+describe('query numbers', () => {
+  it('a missing parameter takes the default', () => {
+    expect(num(null, 64, 1, 500)).toBe(64)
+    expect(num('', 64, 1, 500)).toBe(64)
+    expect(num('9999', 64, 1, 500)).toBe(500)
+    expect(num('abc', 64, 1, 500)).toBe(64)
   })
 })
 

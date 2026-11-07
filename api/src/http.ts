@@ -43,6 +43,8 @@ export const clean = (v: unknown, max: number): string =>
   typeof v === 'string' ? v.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ').trim().slice(0, max) : ''
 
 export const num = (v: string | null, def: number, min: number, max: number): number => {
+  // A missing parameter is the default, not Number(null) = 0.
+  if (v === null || v.trim() === '') return def
   const n = Number(v)
   return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.floor(n))) : def
 }
