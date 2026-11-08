@@ -9,7 +9,7 @@ publish = false
 [workspace]
 
 [dev-dependencies]
-near-workspaces = "0.20"
+near-workspaces = "0.24"
 tokio = { version = "1", features = ["full"] }
 serde_json = "1"
 anyhow = "1"
