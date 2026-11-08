@@ -99,7 +99,7 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 .route { flex: 1; animation: route .42s var(--ease); }
 .page { width: 100%; padding: 10px var(--gutter) 0; }
 .page.center { text-align: center; padding-top: 90px; display: grid; gap: 16px; justify-items: center; }
-.page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 20px; }
+.page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 20px; }
 .lead { margin-top: 8px; max-width: 62ch; }
 .skeleton { height: 340px; }
 .card { background: var(--surface); border-radius: 24px; padding: 20px; min-width: 0; box-shadow: var(--shadow); }
@@ -438,3 +438,41 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 .warn-word { color: var(--warn); }
 .small-link { font-size: 13px; text-decoration: underline; text-underline-offset: 2px; }
 .treasury-cash { padding: 12px 14px; margin-top: 10px; background: var(--sunken); border-radius: 14px; }
+
+/* Pictures on the gardener cards of the home page */
+.way-art { width: 100%; height: auto; max-height: 84px; margin-bottom: 6px; }
+.how-way { gap: 2px; }
+
+/* Planting: the sprout comes out of the soil when a token is created */
+.planting { position: fixed; inset: 0; z-index: 60; display: grid; place-content: center; justify-items: center; gap: 8px; padding: 24px; text-align: center; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(6px); animation: appear .25s var(--ease); }
+.planting-scene { width: min(300px, 70vw); aspect-ratio: 1; }
+.planting-scene svg { width: 100%; height: 100%; overflow: visible; }
+.planting-title { font-size: 22px; font-weight: 650; }
+.planting-sprout { transform: translateY(160px); animation: sprout-rise 1.6s cubic-bezier(.2, .9, .25, 1) .25s forwards; }
+.planting-stem { stroke-dasharray: 170; stroke-dashoffset: 170; animation: stem-grow 1.3s ease-out .35s forwards; }
+.planting-leaf { transform-box: fill-box; opacity: 0; }
+.planting-leaf-l { transform-origin: 100% 60%; transform: rotate(60deg) scale(.2); animation: leaf-open-l .9s cubic-bezier(.3, 1.4, .5, 1) 1.25s forwards, leaf-sway-l 3.2s ease-in-out 2.4s infinite alternate; }
+.planting-leaf-r { transform-origin: 0% 60%; transform: rotate(-60deg) scale(.2); animation: leaf-open-r .9s cubic-bezier(.3, 1.4, .5, 1) 1.35s forwards, leaf-sway-r 3.2s ease-in-out 2.5s infinite alternate; }
+.planting-mound { animation: mound-push .5s ease-out .25s; transform-box: fill-box; transform-origin: 50% 100%; }
+.planting-crumbs circle { opacity: 0; animation: crumb 1s ease-out .45s forwards; }
+.planting-crumbs circle:nth-child(2) { animation-delay: .55s; } .planting-crumbs circle:nth-child(3) { animation-delay: .5s; } .planting-crumbs circle:nth-child(4) { animation-delay: .6s; }
+@keyframes sprout-rise { to { transform: translateY(0); } }
+@keyframes stem-grow { to { stroke-dashoffset: 0; } }
+@keyframes leaf-open-l { to { opacity: 1; transform: rotate(0deg) scale(1); } }
+@keyframes leaf-open-r { to { opacity: 1; transform: rotate(0deg) scale(1); } }
+@keyframes leaf-sway-l { from { opacity: 1; transform: rotate(0deg); } to { opacity: 1; transform: rotate(-6deg); } }
+@keyframes leaf-sway-r { from { opacity: 1; transform: rotate(0deg); } to { opacity: 1; transform: rotate(6deg); } }
+@keyframes mound-push { 40% { transform: scaleY(1.25); } }
+@keyframes crumb { 0% { opacity: 1; transform: translate(0, 0); } 100% { opacity: 0; transform: translate(var(--dx, 0), 14px); } }
+.planting-crumbs circle:nth-child(1) { --dx: -14px; } .planting-crumbs circle:nth-child(2) { --dx: 12px; } .planting-crumbs circle:nth-child(3) { --dx: -6px; } .planting-crumbs circle:nth-child(4) { --dx: 8px; }
+@media (prefers-reduced-motion: reduce) { .planting-sprout, .planting-stem, .planting-leaf, .planting-mound, .planting-crumbs circle { animation-duration: .01s !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; } }
+
+/* A bigger sprout in the create preview */
+.preview-tree { height: 300px; overflow: hidden; }
+.preview-tree canvas { transform: scale(1.9); transform-origin: 50% 94%; }
+
+/* Share card */
+.share-modal { width: min(640px, calc(100vw - 32px)); display: grid; gap: 14px; }
+.share-preview { border-radius: 14px; overflow: hidden; background: var(--sunken); aspect-ratio: 1200 / 630; }
+.share-preview img, .share-preview .skeleton { width: 100%; height: 100%; display: block; }
+.share-actions { display: flex; flex-wrap: wrap; gap: 8px; }

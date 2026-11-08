@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AiChip, AiDecisions } from '../components/AiProof'
+import { ShareButton } from '../components/ShareCard'
 import { Link, useParams } from 'react-router-dom'
 import Tree from '../components/Tree'
 import { Chart, CopyCa, Cover, ICONS, Icon, Num, PageTabs, Star, Tabs, TokenSocials, UserAvatar, ago, fmtAmt, fmtNear, fmtPrice, fmtUsd } from '../components/ui'
@@ -132,6 +133,7 @@ export default function TokenPage() {
         </div>
         <div className="token-actions">
           <TokenSocials t={t} />
+          <ShareButton t={t} />
           <CopyCa t={t} full />
         </div>
       </div>

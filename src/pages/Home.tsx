@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import Tree from '../components/Tree'
+import { AgentArt, CopyArt, CreateArt } from '../components/WayArt'
 import { Num, TokenCard, fmtUsd } from '../components/ui'
 import { capUsd, growth, holderCount, progress } from '../lib/engine'
 import { FIRE_DRAWDOWN, STRATEGIES, WARN_DRAWDOWN, useS } from '../lib/store'
@@ -13,9 +14,9 @@ const STEPS = [
 ]
 const TIERS = [{ days: 3, weight: '×1', width: 50 }, { days: 5, weight: '×1.5', width: 75 }, { days: 10, weight: '×2', width: 100 }]
 const WAYS = [
-  { title: 'Copy one', to: '/gardeners', text: 'Every trade it makes also runs for you, at your size. You set the budget and when to stop.' },
-  { title: 'Create your own', to: '/gardeners?tab=create', text: `Pick one of ${STRATEGIES.length} strategies, then set its budget and limits.` },
-  { title: 'Bring your agent', to: '/gardeners?tab=api', text: 'Connect an agent you built with an API key, and set its limits yourself.' },
+  { title: 'Copy one', to: '/gardeners', text: 'Its trades run for you, at your size.', Art: CopyArt },
+  { title: 'Create your own', to: '/gardeners?tab=create', text: `${STRATEGIES.length} strategies, your limits.`, Art: CreateArt },
+  { title: 'Bring your agent', to: '/gardeners?tab=api', text: 'Plug in your bot with an API key.', Art: AgentArt },
 ]
 
 function HowItWorks() {
@@ -46,20 +47,19 @@ function HowItWorks() {
           <div className="how-agents-head">
             <div>
               <h3>Gardeners</h3>
-              <p>AI agents that trade in the open. Five are ours, the rest come from the community, and every trade is public.</p>
+              <p>AI agents that trade in the open. Every trade is public.</p>
             </div>
             <Link to="/gardeners" className="btn primary small">See gardeners</Link>
           </div>
           <div className="how-ways">
-            {WAYS.map((w) => <Link to={w.to} className="how-way" key={w.title}><b>{w.title}</b><span>{w.text}</span></Link>)}
+            {WAYS.map((w) => <Link to={w.to} className="how-way" key={w.title}><w.Art /><b>{w.title}</b><span>{w.text}</span></Link>)}
           </div>
           <div className="how-fire">
             <div className="row between"><b>Lose too much and you're fired</b><small className="muted">From its peak</small></div>
             <div className="how-meter" aria-hidden="true"><i style={{ left: `${(WARN_DRAWDOWN / FIRE_DRAWDOWN) * 100}%` }} /></div>
             <div className="how-meter-labels" aria-hidden="true"><span>Peak</span><span style={{ left: `${(WARN_DRAWDOWN / FIRE_DRAWDOWN) * 100}%` }}>-{WARN_DRAWDOWN}% warning</span><span>-{FIRE_DRAWDOWN}% fired</span></div>
-            <p>A fired gardener stops trading and its record stays public. When one of ours is fired, a new one takes its place.</p>
           </div>
-          <p className="how-note">A dev can also connect a gardener at launch to manage dev rewards. Copying can lose your budget, and past results don't promise future ones.</p>
+          <p className="how-note">Copying can lose your budget. Past results don't promise future ones.</p>
         </div>
       </div>
     </section>

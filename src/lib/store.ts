@@ -411,10 +411,10 @@ export function claimDev(id: string) {
 }
 
 export interface NewToken { name: string; ticker: string; desc: string; image?: string; feePct: number; devBuy: number; redirect: Token['redirect']; gardener: boolean; socials: Token['socials'] }
-export function createToken(n: NewToken, onDone?: (id: string) => void): string | null {
+export function createToken(n: NewToken, onDone?: (id: string) => void, onFail?: () => void): string | null {
   const s = state
   if (!s.me) { setWalletOpen(true); return null }
-  if (LIVE) { live.createTokenLive(n, onDone ?? (() => {})); return null }
+  if (LIVE) { live.createTokenLive(n, onDone ?? (() => {}), onFail); return null }
   const CREATE_FEE = 1
   if (s.balance < CREATE_FEE + n.devBuy) { toast('Not enough NEAR', 'err'); return null }
   const now = Date.now()

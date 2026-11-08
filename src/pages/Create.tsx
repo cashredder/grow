@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Tree from '../components/Tree'
+import Planting from '../components/Planting'
 import { Check, Cover, Page, Slider, fmtNear, Tabs } from '../components/ui'
 import { createToken, setWalletOpen, toast, useS } from '../lib/store'
 import { LIVE } from '../lib/config'
@@ -38,14 +39,20 @@ export default function Create() {
     r.onload = () => setImage(String(r.result))
     r.readAsDataURL(f)
   }
+  // The sprout comes out of the soil while the launch goes through; the token page opens when it is live.
+  const [planting, setPlanting] = useState(false)
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!ok) return
-    const id = createToken({ name, ticker, desc, image, feePct: fee, devBuy, redirect: { pct, to }, gardener, socials: { x: x.trim() || undefined, tg: tg.trim() || undefined, web: web.trim() || undefined } }, (created) => nav(`/token/${created}`))
-    if (id) nav(`/token/${id}`)
+    setPlanting(true)
+    const go = (to: string) => setTimeout(() => nav(`/token/${to}`), 2600)
+    const id = createToken({ name, ticker, desc, image, feePct: fee, devBuy, redirect: { pct, to }, gardener, socials: { x: x.trim() || undefined, tg: tg.trim() || undefined, web: web.trim() || undefined } }, go, () => setPlanting(false))
+    if (id) go(id)
+    else if (!LIVE) setPlanting(false)
   }
   return (
     <Page title="Create token" sub="One transaction. Your tree starts growing with the first trade.">
+      {planting && <Planting ticker={ticker} live={LIVE} />}
       <div className="create">
         <form className="card form" onSubmit={submit}>
           <div className="two">

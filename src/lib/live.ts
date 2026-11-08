@@ -519,9 +519,10 @@ export async function createCost(devBuy: number): Promise<number> {
 }
 
 /** Picture and metadata go to the API (content-addressed), then one transaction launches the token. */
-export function createTokenLive(n: NewToken, onDone: (id: string) => void) {
+export function createTokenLive(n: NewToken, onDone: (id: string) => void, onFail?: () => void) {
   const me = getState().me!
   void run(`$${n.ticker.toUpperCase()} is live`, async () => {
+    try {
     if (!(await needSession())) throw new Error('Sign in to upload the picture')
     let image: string | undefined
     if (n.image?.startsWith('data:')) {
@@ -540,6 +541,10 @@ export function createTokenLive(n: NewToken, onDone: (id: string) => void) {
       deposit,
       tgas: 300,
     })
+    } catch (e) {
+      onFail?.()
+      throw e
+    }
   }, async () => {
     // The indexer picks the launch up within seconds; open its page once it is there.
     for (let i = 0; i < 15; i++) {
@@ -552,6 +557,7 @@ export function createTokenLive(n: NewToken, onDone: (id: string) => void) {
         return
       }
     }
+    onFail?.()
   })
 }
 
