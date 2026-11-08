@@ -195,8 +195,8 @@ export const TokenCard = memo(function TokenCard({ t, note }: { t: Token; note?:
     <Link to={`/token/${t.id}`} className="t-card">
       <Cover t={t} size={104} />
       <span className="t-card-body">
-        <span className="row between"><span className="t-card-id"><b>${t.ticker}</b><small className="muted ellipsis">{t.name}</small></span><span className={change >= 0 ? 'up' : 'down'}>{change >= 0 ? '+' : ''}{change.toFixed(1)}%</span></span>
-        <span className="row between t-card-mid"><small className="muted ellipsis">{t.desc}</small><TokenLinks t={t} /></span>
+        <span className="row between"><span className="t-card-id"><b>${t.ticker}</b></span><span className={change >= 0 ? 'up' : 'down'}>{change >= 0 ? '+' : ''}{change.toFixed(1)}%</span></span>
+        <span className="row between t-card-mid"><span className="t-card-name ellipsis" title={t.name}>{t.name}</span><TokenLinks t={t} /></span>
         <span className="row between t-card-foot"><span className="big-num"><Num value={capUsd(t)} format={fmtUsd} /></span><small className="muted">{note ?? stage(t)}</small></span>
         <span className="bar"><i style={{ transform: `scaleX(${progress(t)})` }} /></span>
       </span>

@@ -1,13 +1,14 @@
-// Share: draws a 1200×630 card of a token (its tree as it is now, the ticker and name, market cap and
-// holders) and offers it to download, copy, share or post.
+// Share: draws a square card of a token (its tree as it is now in a window, then its picture, ticker, full
+// name, market cap, holders and price change) and offers it to download, copy, share or post.
 import { useEffect, useState } from 'react'
 import { capUsd, growth, holderCount, type Token } from '../lib/engine'
 import { toast } from '../lib/store'
 import { drawTree } from './Tree'
-import { ICONS, Icon, fmtUsd, useExit } from './ui'
+import { ICONS, Icon, fmtUsd, recentChange, useExit } from './ui'
 
-const W = 1200, H = 630
+const W = 1080, H = 1080
 const LIME = '#86E01E'
+const INK = '#edf2ec', MID = '#98a59b', FAINT = '#6c776f'
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath()
@@ -45,7 +46,21 @@ async function coverImage(src?: string): Promise<HTMLImageElement | null> {
   }
 }
 
-/** The card as a PNG. */
+const font = (w: number, px: number) => `${w} ${px}px "Instrument Sans Variable", system-ui, sans-serif`
+
+/** Draws text, shrinking it until it fits `max` pixels. */
+function fitText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, max: number, weight: number, px: number, color: string) {
+  let size = px
+  ctx.font = font(weight, size)
+  while (size > 18 && ctx.measureText(text).width > max) {
+    size -= 2
+    ctx.font = font(weight, size)
+  }
+  ctx.fillStyle = color
+  ctx.fillText(text, x, y)
+}
+
+/** The square card as a PNG: the tree in its window, then the token and its numbers. */
 export async function renderShareCard(t: Token): Promise<Blob> {
   const scale = 2
   const c = document.createElement('canvas')
@@ -54,52 +69,100 @@ export async function renderShareCard(t: Token): Promise<Blob> {
   const ctx = c.getContext('2d')!
   ctx.scale(scale, scale)
   await Promise.all([document.fonts.load('700 64px "Instrument Sans Variable"'), document.fonts.load('500 24px "Instrument Sans Variable"')])
-  const font = (w: number, px: number) => `${w} ${px}px "Instrument Sans Variable", system-ui, sans-serif`
 
-  // Background: deep green night with a soft glow behind the tree.
-  const bg = ctx.createLinearGradient(0, 0, W, H)
-  bg.addColorStop(0, '#0b100c'); bg.addColorStop(1, '#121a13')
-  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H)
-  const glow = ctx.createRadialGradient(340, 360, 20, 340, 360, 330)
-  glow.addColorStop(0, 'rgba(134, 224, 30, 0.22)'); glow.addColorStop(1, 'rgba(134, 224, 30, 0)')
-  ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H)
+  ctx.fillStyle = '#0b100c'
+  ctx.fillRect(0, 0, W, H)
 
-  // The tree as it is now, standing on the bottom edge of its half.
+  // The window: a night sky over a strip of soil, the tree standing on it.
+  const P = 48, WX = P, WY = P, WW = W - 2 * P, WH = 600
+  ctx.save()
+  roundRect(ctx, WX, WY, WW, WH, 36)
+  ctx.clip()
+  const sky = ctx.createLinearGradient(0, WY, 0, WY + WH)
+  sky.addColorStop(0, '#121b13')
+  sky.addColorStop(1, '#1a2a17')
+  ctx.fillStyle = sky
+  ctx.fillRect(WX, WY, WW, WH)
+  const glow = ctx.createRadialGradient(W / 2, WY + WH * 0.55, 10, W / 2, WY + WH * 0.55, WW * 0.55)
+  glow.addColorStop(0, 'rgba(134, 224, 30, 0.24)')
+  glow.addColorStop(1, 'rgba(134, 224, 30, 0)')
+  ctx.fillStyle = glow
+  ctx.fillRect(WX, WY, WW, WH)
+  const ground = WY + WH - 64
+  ctx.fillStyle = '#3b2a1b'
+  ctx.fillRect(WX, ground, WW, WH)
+  ctx.fillStyle = '#4c3623'
+  ctx.fillRect(WX, ground, WW, 10)
   const size = 1000
-  const off = document.createElement('canvas'); off.width = size; off.height = size
-  drawTree(off.getContext('2d')!, growth(capUsd(t)), size, size, !!t.parents)
-  ctx.drawImage(off, 340 - 300, 630 - 600 + 12, 600, 600)
+  const off = document.createElement('canvas')
+  off.width = size
+  off.height = size
+  const o = off.getContext('2d')!
+  drawTree(o, growth(capUsd(t)), size, size, !!t.parents)
+  // Crop to the tree itself and scale it to fill most of the window, standing on the soil.
+  const { data } = o.getImageData(0, 0, size, size)
+  let x0 = size, x1 = 0, y0 = size, y1 = 0
+  for (let y = 0; y < size; y += 2) for (let x = 0; x < size; x += 2) if (data[(y * size + x) * 4 + 3] > 24) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y) }
+  if (x1 > x0 && y1 > y0) {
+    const w = x1 - x0 + 2, h = y1 - y0 + 2
+    const k = Math.min((WH - 64 - 70) / h, (WW - 120) / w, 6)
+    ctx.drawImage(off, x0, y0, w, h, W / 2 - (w * k) / 2, ground + 6 - h * k, w * k, h * k)
+  }
+  ctx.restore()
 
-  // Text column.
-  const x = 680
+  // The token: its picture, ticker and full name.
+  const IY = WY + WH + 44
   const cover = await coverImage(t.image)
-  if (cover) {
-    ctx.save(); roundRect(ctx, x, 150, 76, 76, 18); ctx.clip(); ctx.drawImage(cover, x, 150, 76, 76); ctx.restore()
-  } else {
-    ctx.fillStyle = LIME; roundRect(ctx, x, 150, 76, 76, 18); ctx.fill()
-    ctx.fillStyle = '#0b100c'; ctx.font = font(700, 30); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-    ctx.fillText(t.ticker.slice(0, 2), x + 38, 189)
+  ctx.save()
+  roundRect(ctx, P, IY, 112, 112, 26)
+  ctx.clip()
+  if (cover) ctx.drawImage(cover, P, IY, 112, 112)
+  else {
+    ctx.fillStyle = LIME
+    ctx.fillRect(P, IY, 112, 112)
+    ctx.fillStyle = '#0b100c'
+    ctx.font = font(700, 42)
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(t.ticker.slice(0, 2), P + 56, IY + 58)
     ctx.textAlign = 'left'
+    ctx.textBaseline = 'alphabetic'
   }
-  ctx.textBaseline = 'alphabetic'
-  ctx.fillStyle = '#edf2ec'; ctx.font = font(700, 64)
-  ctx.fillText(`$${t.ticker}`, x, 300, W - x - 60)
-  ctx.fillStyle = '#98a59b'; ctx.font = font(500, 28)
-  ctx.fillText(t.name, x, 342, W - x - 60)
+  ctx.restore()
+  const TX = P + 112 + 28, TW = W - P - TX
+  fitText(ctx, `$${t.ticker}`, TX, IY + 56, TW, 700, 60, INK)
+  fitText(ctx, t.name, TX, IY + 100, TW, 500, 32, MID)
 
-  const stat = (label: string, value: string, sx: number) => {
-    ctx.fillStyle = '#98a59b'; ctx.font = font(500, 22); ctx.fillText(label, sx, 418)
-    ctx.fillStyle = '#edf2ec'; ctx.font = font(700, 44); ctx.fillText(value, sx, 466)
-  }
-  stat('Market cap', fmtUsd(capUsd(t)), x)
-  stat('Holders', String(holderCount(t)), x + 250)
+  // The numbers.
+  const change = recentChange(t)
+  const stats: [string, string, string][] = [
+    ['Market cap', fmtUsd(capUsd(t)), INK],
+    ['Holders', String(holderCount(t)), INK],
+    ['Change', `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`, change >= 0 ? LIME : '#ff6b5e'],
+  ]
+  const SY = IY + 156, col = (W - 2 * P) / stats.length
+  stats.forEach(([label, value, color], i) => {
+    const x = P + i * col
+    ctx.fillStyle = FAINT
+    ctx.font = font(500, 24)
+    ctx.fillText(label, x, SY + 26)
+    fitText(ctx, value, x, SY + 76, col - 24, 700, 46, color)
+  })
 
-  // Footer: logo and where to find it.
+  // Footer: the logo and what grow. is.
+  const FY = H - P - 4
   const logo = await logoImage()
-  if (logo) ctx.drawImage(logo, x, 538, 104, 32)
-  else { ctx.fillStyle = LIME; ctx.font = font(800, 34); ctx.fillText('grow.', x, 566) }
-  ctx.fillStyle = '#6c776f'; ctx.font = font(500, 20)
-  ctx.fillText('Every token is a tree · NEAR', x + 120, 562)
+  if (logo) ctx.drawImage(logo, P, FY - 34, 112, 34)
+  else {
+    ctx.fillStyle = LIME
+    ctx.font = font(800, 36)
+    ctx.fillText('grow.', P, FY)
+  }
+  ctx.fillStyle = FAINT
+  ctx.font = font(500, 22)
+  ctx.textAlign = 'right'
+  ctx.fillText('Every token is a tree · on NEAR', W - P, FY - 6)
+  ctx.textAlign = 'left'
 
   return await new Promise((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error('could not draw the card'))), 'image/png'))
 }
@@ -145,7 +208,7 @@ export function ShareButton({ t }: { t: Token }) {
         <div className={`modal-back ${leaving ? 'leaving' : ''}`} onPointerDown={(e) => { if (e.target === e.currentTarget) setOpen(false) }}>
           <div className="modal share-modal" role="dialog" aria-modal="true" aria-label={`Share $${t.ticker}`}>
             <div className="row between"><h2>Share ${t.ticker}</h2><button className="btn icon" aria-label="Close" onClick={() => setOpen(false)}><Icon d={ICONS.x} /></button></div>
-            <div className="share-preview">{png ? <img src={png.url} alt={`$${t.ticker} card: its tree, market cap and holders`} /> : <div className="skeleton" />}</div>
+            <div className="share-preview">{png ? <img src={png.url} alt={`$${t.ticker} card: its tree, market cap, holders and change`} /> : <div className="skeleton" />}</div>
             <div className="share-actions">
               {png && <a className="btn primary small" href={png.url} download={`${t.ticker.toLowerCase()}-grow.png`}>Download</a>}
               {png && <button className="btn ghost small" onClick={copy}>Copy image</button>}
