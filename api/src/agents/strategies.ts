@@ -38,6 +38,8 @@ export interface Entry {
 export interface AgentState {
   entries: Record<string, Entry>
   last_buy?: number
+  /** Hash of what the AI model was last shown: an unchanged market is not asked again. */
+  ai_fp?: string
 }
 
 export interface Decision {

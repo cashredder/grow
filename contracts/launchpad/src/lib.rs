@@ -11,6 +11,7 @@
 //!   treasury somewhere. It can never move curve or pool NEAR, user credits or vault funds.
 //! - Every payout except a trader's own proceeds and refunds is credited and pulled.
 //! - Amounts are yoctoNEAR and token base units (18 decimals). Times are milliseconds.
+mod ai_fee;
 mod create;
 mod cross;
 mod events;

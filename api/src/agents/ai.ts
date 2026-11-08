@@ -5,6 +5,7 @@
 // - AI Treasurer (strategy "treasurer", a token's own Dev gardener): spends the token's treasury on buybacks,
 //   holder rewards and the dev's pay (launchpad `treasury_action`).
 import type { Env } from '../env'
+import { sha256Hex } from '../http'
 import { askNearAi, jsonIn, saveDecision } from './nearai'
 import { type AgentState, type Decision, decide, type MarketToken, minTrade, type VaultSnapshot } from './strategies'
 
@@ -35,7 +36,7 @@ Answer with JSON only, no other text:
 At most 2 decisions. An empty list is a valid answer.`
 
 /** AI Trader: the model's trades, checked against the vault. Falls back to the trend rules. */
-export async function aiTrades(env: Env, v: VaultSnapshot, market: MarketToken[], st: AgentState, now: number): Promise<{ decisions: Decision[]; aiId: number | null }> {
+export async function aiTrades(env: Env, v: VaultSnapshot, market: MarketToken[], st: AgentState, now: number): Promise<{ decisions: Decision[]; aiId: number | null; fp?: string }> {
   const maxBuy = Math.min(v.cash, Math.max(0, v.daily_limit - v.spent_today), v.equity * 0.2)
   if (!env.NEARAI_KEY) return { decisions: decide('trend', v, market, st, now), aiId: null }
   const tokens = market.slice(0, 25).map((t) => ({ id: t.id, ticker: t.ticker, phase: t.phase, progress_to_pool_pct: r(t.progress * 100, 1), mcap_near: r(t.mcap, 1), holders: t.holders, volume_1h_near: r(t.volume_1h, 2), buyers_1h: t.buyers_1h, change_1h_pct: r(t.change_1h, 1), change_24h_pct: r(t.change_24h, 1) }))
@@ -43,6 +44,9 @@ export async function aiTrades(env: Env, v: VaultSnapshot, market: MarketToken[]
     vault: { cash_near: r(v.cash), equity_near: r(v.equity), max_buy_near: r(maxBuy), min_trade_near: minTrade(), positions: positionsOf(v, market, st) },
     market: tokens,
   })
+  // Nothing moved since the last question: no new call (and no fee).
+  const fp = await sha256Hex(user)
+  if (fp === st.ai_fp) return { decisions: [], aiId: null, fp }
   const a = await askNearAi(env, TRADER_SYSTEM, user)
   const out = jsonIn<{ decisions?: { token_id?: string; side?: string; near?: number; fraction?: number; reason?: string }[] }>(a.content)
   const byId = new Map(market.map((t) => [t.id, t]))
@@ -64,9 +68,9 @@ export async function aiTrades(env: Env, v: VaultSnapshot, market: MarketToken[]
     }
   }
   const aiId = await saveDecision(env, v.id, 'trade', a, { decisions, raw: out })
-  // A failed call (no answer at all) falls back to rules, so the vault keeps working.
-  if (a.error) return { decisions: decide('trend', v, market, st, now), aiId }
-  return { decisions, aiId }
+  // A failed call (no answer at all) falls back to rules, so the vault keeps working; it is not paid for.
+  if (a.error) return { decisions: decide('trend', v, market, st, now), aiId: null }
+  return { decisions, aiId, fp }
 }
 
 const TREASURER_SYSTEM = `You are the AI treasurer of one token on grow., a token launchpad on NEAR. The treasury is NEAR the token earned from trading fees (the dev's share).
@@ -91,7 +95,7 @@ function treasuryRules(v: VaultSnapshot, t: MarketToken): TreasuryDecision[] {
 }
 
 /** AI Treasurer: the model's treasury actions, checked against the treasury and its daily limits. */
-export async function aiTreasury(env: Env, v: VaultSnapshot, t: MarketToken | undefined): Promise<{ actions: TreasuryDecision[]; aiId: number | null }> {
+export async function aiTreasury(env: Env, v: VaultSnapshot, t: MarketToken | undefined, lastFp?: string): Promise<{ actions: TreasuryDecision[]; aiId: number | null; fp?: string }> {
   if (!t) return { actions: [], aiId: null }
   const room = Math.min(v.cash * 0.25, Math.max(0, v.daily_limit - v.spent_today))
   if (room < TREASURY_MIN) return { actions: [], aiId: null }
@@ -100,6 +104,8 @@ export async function aiTreasury(env: Env, v: VaultSnapshot, t: MarketToken | un
     token: { id: t.id, ticker: t.ticker, phase: t.phase, progress_to_pool_pct: r(t.progress * 100, 1), price_near: t.price, high_24h_near: t.high_24h, change_1h_pct: r(t.change_1h, 1), change_24h_pct: r(t.change_24h, 1), holders: t.holders, volume_1h_near: r(t.volume_1h, 2), buyers_1h: t.buyers_1h },
     treasury: { cash_near: r(v.cash), max_spend_this_run_near: r(room), min_action_near: TREASURY_MIN },
   })
+  const fp = await sha256Hex(user)
+  if (fp === lastFp) return { actions: [], aiId: null, fp }
   const a = await askNearAi(env, TREASURER_SYSTEM, user)
   const out = jsonIn<{ actions?: { action?: string; near?: number; reason?: string }[] }>(a.content)
   const actions: TreasuryDecision[] = []
@@ -112,6 +118,6 @@ export async function aiTreasury(env: Env, v: VaultSnapshot, t: MarketToken | un
     actions.push({ action: d.action, near, note: clip(d.reason) || 'AI treasury decision' })
   }
   const aiId = await saveDecision(env, v.id, 'treasury', a, { actions, raw: out })
-  if (a.error) return { actions: treasuryRules(v, t), aiId }
-  return { actions, aiId }
+  if (a.error) return { actions: treasuryRules(v, t), aiId: null }
+  return { actions, aiId, fp }
 }

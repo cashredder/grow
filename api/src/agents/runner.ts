@@ -63,13 +63,17 @@ export async function runAgents(env: Env): Promise<number> {
     if (strategy === 'treasurer') {
       const tokenId = (v.allowed as { Only?: string })?.Only
       const token = market.find((t) => t.id === tokenId) ?? (tokenId ? (await marketSnapshot(env, now, tokenId))[0] : undefined)
-      const { actions, aiId } = await aiTreasury(env, v, token)
+      const { actions, aiId, fp } = await aiTreasury(env, v, token, st.ai_fp)
+      if (fp) st.ai_fp = fp
+      if (aiId) queued += await chargeAi(env, v, aiId)
       for (const a of actions) {
         const id = await enqueue(env, 'relayer', 'treasury_action', { vault_id: v.id, action: a.action, amount: nearRaw(a.near), note: tagged(a.note, aiId) }, { dedupe: `treasury:${v.id}:${Math.floor(now / 60_000)}:${a.action}` })
         if (id) queued++
       }
     } else {
-      const ai = strategy === 'ai' ? await aiTrades(env, v, market, st, now) : { decisions: decide(strategy, v, market, st, now), aiId: null }
+      const ai: { decisions: Decision[]; aiId: number | null; fp?: string } = strategy === 'ai' ? await aiTrades(env, v, market, st, now) : { decisions: decide(strategy, v, market, st, now), aiId: null }
+      if (ai.fp) st.ai_fp = ai.fp
+      if (ai.aiId) queued += await chargeAi(env, v, ai.aiId)
       decisions = ai.decisions.slice(0, 3)
       for (const d of decisions) {
         const args = await tradeArgs(env, v, d.token_id, d.buy, d.near, d.fraction)
@@ -78,10 +82,27 @@ export async function runAgents(env: Env): Promise<number> {
         if (id) queued++
       }
     }
-    const next = remember(st, decisions, market, now)
+    const next = { ...remember(st, decisions, market, now), ai_fp: st.ai_fp }
     await env.DB.prepare('INSERT INTO agent_state (vault_id, last_run, state) VALUES (?, ?, ?) ON CONFLICT (vault_id) DO UPDATE SET last_run = excluded.last_run, state = excluded.state').bind(v.id, now, JSON.stringify(next)).run()
   }
   return queued
+}
+
+let feeCache: { near: number; at: number } | null = null
+/** The launchpad's fee per AI decision, in NEAR (read every 10 minutes). */
+async function aiFee(env: Env): Promise<number> {
+  if (!feeCache || Date.now() - feeCache.at > 600_000) {
+    const raw = await view<string>(env, env.LAUNCHPAD, 'ai_fee').catch(() => null)
+    feeCache = { near: raw ? Number(BigInt(raw) / 10n ** 18n) / 1e6 : 0.001, at: Date.now() }
+  }
+  return feeCache.near
+}
+
+/** One answered AI decision is paid by the gardener that asked (grow.'s own gardeners are not charged). */
+async function chargeAi(env: Env, v: VaultSnapshot, aiId: number): Promise<number> {
+  if (v.kind === 'House') return 0
+  if (v.cash < (await aiFee(env))) return 0
+  return (await enqueue(env, 'relayer', 'pay_ai', { vault_id: v.id, decision: aiId }, { dedupe: `ai-fee:${aiId}`, tgas: 30 })) ? 1 : 0
 }
 
 /** Contract arguments for a vault trade, with min_out from a live quote less the slippage. */

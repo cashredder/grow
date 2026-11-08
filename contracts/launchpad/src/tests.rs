@@ -580,3 +580,54 @@ fn other_gardeners_have_no_treasury() {
     at("relayer.near", T0 + 1, 0);
     l.treasury_action(vid, TreasuryAction::Rewards, U128(1), None);
 }
+
+// ---------------------------------------------------------------- paying for AI
+
+#[test]
+fn ai_decisions_are_paid_from_the_gardener_into_the_ai_fund() {
+    let (mut l, _id, vid) = funded_treasury();
+    let cash = l.get_vault(vid).unwrap().vault.cash.0;
+    let fee = l.ai_fee().0;
+    assert_eq!(fee, ONE_NEAR / 1_000);
+    at("relayer.near", T0 + 200_000, 0);
+    l.pay_ai(vid, 1);
+    assert_eq!(l.get_vault(vid).unwrap().vault.cash.0, cash - fee);
+    assert_eq!(l.ai_fund().0, fee);
+    // A treasurer's fee is spending, not a trading loss.
+    assert_eq!(l.get_vault(vid).unwrap().drawdown_bps, 0);
+    // The next one may come 5 minutes later.
+    at("relayer.near", T0 + 200_000 + 5 * 60_000, 0);
+    l.pay_ai(vid, 2);
+    assert_eq!(l.ai_fund().0, 2 * fee);
+    at("owner.near", T0 + 500_000, 0);
+    let _ = l.claim_ai_fund();
+    assert_eq!(l.ai_fund().0, 0);
+}
+
+#[test]
+#[should_panic(expected = "one AI fee per 5 minutes")]
+fn the_ai_fee_cannot_be_charged_twice_in_a_row() {
+    let (mut l, _id, vid) = funded_treasury();
+    at("relayer.near", T0 + 200_000, 0);
+    l.pay_ai(vid, 1);
+    at("relayer.near", T0 + 200_001, 0);
+    l.pay_ai(vid, 2);
+}
+
+#[test]
+#[should_panic(expected = "grow.'s own gardeners do not pay for AI")]
+fn house_gardeners_never_pay_for_ai() {
+    let mut l = setup();
+    at("owner.near", T0, 10 * ONE_NEAR);
+    let vid = l.create_house_vault("Sage".into(), "ai".into(), U128(5 * ONE_NEAR));
+    at("relayer.near", T0 + 1, 0);
+    l.pay_ai(vid, 1);
+}
+
+#[test]
+#[should_panic(expected = "the AI fee is capped at 0.01 NEAR")]
+fn the_ai_fee_is_capped() {
+    let mut l = setup();
+    at("owner.near", T0, 0);
+    l.set_ai_fee(U128(ONE_NEAR / 50));
+}

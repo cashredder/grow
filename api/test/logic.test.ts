@@ -177,6 +177,18 @@ describe('NEAR AI decisions', async () => {
     expect(r.actions).toEqual([{ action: 'pay_dev', near: 0.8, note: 'Healthy week' }, { action: 'buyback', near: 0.2, note: 'AI treasury decision' }])
   })
 
+  it('an unchanged market is not asked again, and a failed call is not paid for', async () => {
+    const { e, saved } = env({ decisions: [] })
+    const first = await aiTrades(e, v({}), [t({})], { entries: {} }, Date.now())
+    expect(first.aiId).toBe(1)
+    const again = await aiTrades(e, v({}), [t({})], { entries: {}, ai_fp: first.fp }, Date.now())
+    expect(again.aiId).toBe(null)
+    expect(saved).toHaveLength(1)
+    globalThis.fetch = (async () => new Response('{"error":{"message":"No spending limit configured"}}', { status: 402 })) as typeof fetch
+    const failed = await aiTrades(e, v({}), [t({ price: 2 })], { entries: {} }, Date.now())
+    expect(failed.aiId).toBe(null)
+  })
+
   it('without a key the treasurer follows the rules', async () => {
     const r = await aiTreasury({ DB: {} } as never, v({ kind: 'Dev', cash: 2, daily_limit: 100 }), t({ price: 0.8, high_24h: 1 }))
     expect(r.actions[0]).toMatchObject({ action: 'buyback', near: 0.3 })

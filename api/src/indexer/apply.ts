@@ -434,6 +434,19 @@ export async function applyEvents(env: Env, events: ChainEvent[]): Promise<Appli
         feed.push({ type: 'vault_trade', data: { vault_id: v.id, name: v.name, token_id: tid, side: str(d.side), near, note: d.note ?? null, ts: e.ts, seq: Number(d.seq ?? 0), copied: !(d.copied_from === null || d.copied_from === undefined) } })
         break
       }
+      case 'ai_fee': {
+        const v = vaults.get(Number(d.vault_id))
+        if (!v) break
+        const near = toNear(raw(d.near))
+        v.cash = toNear(raw(d.cash))
+        touchedVaults.add(v.id)
+        stmts.push(
+          db
+            .prepare("INSERT INTO vault_log (vault_id, ts, receipt, token_id, side, near, tokens, note, seq, copied_from) VALUES (?, ?, ?, '', 'ai_fee', ?, 0, ?, 0, NULL)")
+            .bind(v.id, e.ts, e.receipt, near, `Paid for NEAR AI decision #ai${Number(d.decision ?? 0)}`),
+        )
+        break
+      }
       case 'treasury': {
         // A token treasurer spent NEAR on its token: into the buyback pool, the holders' rewards, or to the dev.
         const v = vaults.get(Number(d.vault_id))

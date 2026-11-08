@@ -15,7 +15,7 @@ import type { Env } from '../env'
 import { sha256Hex } from '../http'
 
 const API = 'https://cloud-api.near.ai/v1'
-export const DEFAULT_MODEL = 'zai-org/GLM-5.1-FP8'
+export const DEFAULT_MODEL = 'z-ai/glm-5.3-flash'
 const ATTEST_EVERY_MS = 6 * 3_600_000
 
 export interface AiProof {
