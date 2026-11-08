@@ -229,6 +229,26 @@ impl Launchpad {
             self.crossings.insert(cross_id, c);
             return PromiseOrValue::Value(());
         }
+        self.complete_cross(cross_id);
+        PromiseOrValue::Value(())
+    }
+
+    /// Owner only: finishes a crossing whose new token was deployed but whose completion did not run (before
+    /// the fix for NEAR's ban on returning joint promises, the callback failed after the deploy).
+    pub fn recover_cross(&mut self, cross_id: u64) {
+        self.only_owner();
+        require!(self.crossing(cross_id).status == CrossStatus::Deploying, "only a deploying crossing can be recovered");
+        self.complete_cross(cross_id);
+    }
+}
+
+impl Launchpad {
+    /// Moves both markets into the new token's pool, marks the old tokens merged and burns their market coins.
+    fn complete_cross(&mut self, cross_id: u64) {
+        let mut c = self.crossing(cross_id);
+        let new_id = c.new_token.clone().unwrap();
+        let mut ta = self.token(&c.a);
+        let mut tb = self.token(&c.b);
         let now = now_ms();
         let mut tc = self.token(&new_id);
         tc.phase = Phase::Pool;
@@ -270,21 +290,17 @@ impl Launchpad {
         let burn = |acc: AccountId, amount: u128| {
             Promise::new(acc).function_call("burn", json!({ "amount": U128(amount) }).to_string().into_bytes(), NearToken::from_yoctonear(0), GAS_BURN)
         };
-        let mut p: Option<Promise> = None;
+        // Separate, detached promises: NEAR does not allow returning a joint one.
         for (acc, amount) in [(acc_a, burn_a), (acc_b, burn_b)] {
             if amount > 0 {
-                let b = burn(acc, amount);
-                p = Some(match p {
-                    Some(x) => x.and(b),
-                    None => b,
-                });
+                burn(acc, amount).detach();
             }
         }
-        match p {
-            Some(p) => PromiseOrValue::Promise(p),
-            None => PromiseOrValue::Value(()),
-        }
     }
+}
+
+#[near]
+impl Launchpad {
 
     /// Coins of a crossed token sent here convert to the new token, keeping their hold time.
     pub(crate) fn convert_in(&mut self, old_id: &str, holder: &AccountId, amount: u128) -> PromiseOrValue<U128> {
@@ -337,7 +353,8 @@ impl Launchpad {
         let acc = o.account.clone();
         self.put_token(o);
         let burn = Promise::new(acc).function_call("burn", json!({ "amount": amount_in }).to_string().into_bytes(), NearToken::from_yoctonear(0), GAS_BURN);
-        give.then(Self::ext(env::current_account_id()).with_static_gas(GAS_CALLBACK).on_tokens_sent(new_id, holder, amount_out, registering, false)).and(burn)
+        burn.detach();
+        give.then(Self::ext(env::current_account_id()).with_static_gas(GAS_CALLBACK).on_tokens_sent(new_id, holder, amount_out, registering, false))
     }
 
     /// Converts coins of a crossed token still waiting here for the caller.

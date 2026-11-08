@@ -4,7 +4,7 @@ import { enqueue } from '../lib/jobs'
 import { nearRaw } from '../lib/units'
 import { view } from '../near/rpc'
 import { aiTrades, aiTreasury } from './ai'
-import { type AgentState, decide, type Decision, type MarketToken, remember, setMinTrade, STRATEGIES, type VaultSnapshot } from './strategies'
+import { type AgentState, decide, type Decision, type MarketToken, remember, setMarketScale, setMinTrade, STRATEGIES, type VaultSnapshot } from './strategies'
 
 const SLIPPAGE = 0.03
 const HOUSE_NAMES = ['Linden', 'Rowan', 'Hazel', 'Cedar', 'Alder', 'Juniper', 'Maple', 'Elm', 'Spruce', 'Larch', 'Holly', 'Yew', 'Poplar', 'Aspen']
@@ -37,6 +37,7 @@ export async function marketSnapshot(env: Env, now = Date.now(), only?: string):
 export async function runAgents(env: Env): Promise<number> {
   if (env.AGENTS_ENABLED !== 'true') return 0
   setMinTrade(Number(env.MIN_TRADE_NEAR || 0.5))
+  setMarketScale(Number(env.MARKET_SCALE || 1))
   const now = Date.now()
   const vaults = await env.DB.prepare(
     `SELECT v.id, v.kind, v.strategy, v.cash, v.equity, v.budget, v.daily_limit, v.allowed, v.positions, s.last_run, s.state,

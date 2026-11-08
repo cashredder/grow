@@ -250,7 +250,6 @@ impl Launchpad {
         require!(env::predecessor_account_id() == v.owner, "owner only");
         require!(v.status != VaultStatus::Closed, "already closed");
         self.normalize_positions(&mut v);
-        let mut promise: Option<Promise> = None;
         let positions = std::mem::take(&mut v.positions);
         for p in positions {
             let mut t = self.token(&p.token_id);
@@ -261,11 +260,8 @@ impl Launchpad {
                 require!(v.cash.0 >= STORAGE_DEPOSIT, "not enough NEAR in the vault to register the coins");
                 v.cash = U128(v.cash.0 - STORAGE_DEPOSIT);
             }
-            let send = self.send_tokens(&t, &v.owner, p.amount.0, pay);
-            promise = Some(match promise {
-                Some(pr) => pr.and(send),
-                None => send,
-            });
+            // Each coin transfer runs on its own: NEAR does not allow returning a joint promise.
+            self.send_tokens(&t, &v.owner, p.amount.0, pay).detach();
         }
         let cash = v.cash.0;
         v.cash = U128(0);
@@ -273,11 +269,7 @@ impl Launchpad {
         emit("vault_closed", json!({ "vault_id": vault_id, "cash": s(cash) }));
         let owner = v.owner.clone();
         self.vaults.insert(vault_id, v);
-        let pay = Promise::new(owner).transfer(NearToken::from_yoctonear(cash));
-        match promise {
-            Some(p) => p.and(pay),
-            None => pay,
-        }
+        Promise::new(owner).transfer(NearToken::from_yoctonear(cash))
     }
 
     // ---------------------------------------------------------------- trading

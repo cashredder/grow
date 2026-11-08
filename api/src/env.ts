@@ -22,6 +22,8 @@ export interface Env {
   HOUSE_BUDGET_NEAR: string
   /** Smallest gardener trade in NEAR (rules strategies). Default 0.5; small on testnet. */
   MIN_TRADE_NEAR?: string
+  /** Scales the rules' NEAR thresholds for a small market (testnet), see strategies.ts. Default 1. */
+  MARKET_SCALE?: string
   /** NEAR AI Cloud model for AI gardeners (see agents/nearai.ts). */
   AI_MODEL?: string
 

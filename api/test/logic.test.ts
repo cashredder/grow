@@ -94,6 +94,18 @@ describe('strategies', () => {
     expect(d[0].near).toBe(5) // daily limit room
   })
 
+  it('on a small market (MARKET_SCALE) the rules scale their thresholds down', async () => {
+    const { setMarketScale } = await import('../src/agents/strategies')
+    const quiet = [tok({ id: 'q', ticker: 'Q', phase: 'Curve', volume_1h: 1, buyers_1h: 1, change_1h: 10 })]
+    expect(decide('trend', vault({}), quiet, { entries: {} }, Date.now())).toHaveLength(0)
+    setMarketScale(0.02)
+    try {
+      expect(decide('trend', vault({}), quiet, { entries: {} }, Date.now())).toMatchObject([{ token_id: 'q', buy: true }])
+    } finally {
+      setMarketScale(1)
+    }
+  })
+
   it('takes profit and cuts losses on held positions', () => {
     const now = Date.now()
     const v = vault({ positions: [{ token_id: 'up', amount: (10n ** 21n).toString() }, { token_id: 'down', amount: (10n ** 21n).toString() }] })

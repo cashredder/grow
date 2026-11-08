@@ -69,6 +69,19 @@ export const setMinTrade = (near: number) => {
   if (near > 0) MIN_TRADE = near
 }
 export const minTrade = () => MIN_TRADE
+
+let SCALE = 1
+/**
+ * MARKET_SCALE: the rules' NEAR thresholds are written for mainnet (20 NEAR an hour, 25 holders, tokens in
+ * their pool). A small market such as testnet sets it below 1: volumes scale down, holder counts drop to a
+ * few, and tokens still on the curve count where the rules wanted pool tokens.
+ */
+export const setMarketScale = (s: number) => {
+  if (s > 0) SCALE = s
+}
+const small = () => SCALE < 1
+const vol = (near: number) => near * SCALE
+const pooled = (t: MarketToken) => t.phase === 'Pool' || small()
 const MAX_POSITION_SHARE = 0.25
 
 const fmt = (n: number) => (Math.abs(n) >= 10 ? n.toFixed(0) : n.toFixed(1))
@@ -114,7 +127,7 @@ export function decide(strategy: string, v: VaultSnapshot, market: MarketToken[]
     case 'steady': {
       // Rebalance anything grown past 30% of the vault; then buy the largest pool tokens in turn.
       for (const t of tokens) if (positionValue(v, t) > v.equity * 0.3) out.push({ token_id: t.id, buy: false, fraction: 0.25, note: `Trimmed $${t.ticker}, it grew past 30% of the vault` })
-      const top = tokens.filter((t) => t.phase === 'Pool').sort((a, b) => b.mcap - a.mcap).slice(0, 3)
+      const top = tokens.filter(pooled).sort((a, b) => b.mcap - a.mcap).slice(0, 3)
       const pick = top[Math.floor(now / STRATEGIES.steady.every_ms) % Math.max(1, top.length)]
       const amount = Math.min(budgetFor(v, 0.05), v.budget * 0.05)
       if (pick && amount >= MIN_TRADE && canBuy(pick)) out.push({ token_id: pick.id, buy: true, near: amount, note: `Scheduled buy of $${pick.ticker}, a top token by market cap` })
@@ -128,7 +141,7 @@ export function decide(strategy: string, v: VaultSnapshot, market: MarketToken[]
         if (t && e && now - e.ts > 30 * 60_000 && t.change_1h < -8 && !out.some((d) => d.token_id === t.id)) out.push({ token_id: t.id, buy: false, fraction: 1, note: `Momentum turned on $${t.ticker} (${fmt(t.change_1h)}% in an hour)` })
       }
       const c = tokens
-        .filter((t) => !held.has(t.id) && t.volume_1h >= 20 && t.buyers_1h >= 5 && t.change_1h >= 5 && t.change_1h <= 60)
+        .filter((t) => !held.has(t.id) && t.volume_1h >= vol(20) && t.buyers_1h >= (small() ? 1 : 5) && t.change_1h >= 5 && t.change_1h <= 60)
         .sort((a, b) => b.volume_1h * b.buyers_1h - a.volume_1h * a.buyers_1h)[0]
       const amount = budgetFor(v, 0.1)
       if (c && amount >= MIN_TRADE) out.push({ token_id: c.id, buy: true, near: amount, note: `Volume and buyers are rising on $${c.ticker}: ${c.buyers_1h} buyers, ${fmt(c.volume_1h)} NEAR in an hour` })
@@ -137,7 +150,7 @@ export function decide(strategy: string, v: VaultSnapshot, market: MarketToken[]
     case 'dip': {
       exits(v, byId, st, now, 12, 10, 86_400_000, out)
       const c = tokens
-        .filter((t) => !held.has(t.id) && t.holders >= 25 && t.change_1h <= -15 && t.change_24h >= -60 && (t.phase === 'Pool' || t.progress >= 0.3))
+        .filter((t) => !held.has(t.id) && t.holders >= (small() ? 2 : 25) && t.change_1h <= -15 && t.change_24h >= -60 && (pooled(t) || t.progress >= 0.3))
         .sort((a, b) => a.change_1h - b.change_1h)[0]
       const amount = budgetFor(v, 0.08)
       if (c && amount >= MIN_TRADE) out.push({ token_id: c.id, buy: true, near: amount, note: `Bought the dip on $${c.ticker}: ${fmt(c.change_1h)}% in an hour, ${c.holders} holders` })
@@ -151,7 +164,7 @@ export function decide(strategy: string, v: VaultSnapshot, market: MarketToken[]
         const gain = (t.price / e.price - 1) * 100
         if ((t.phase === 'Pool' && gain >= 20) || gain <= -15 || now - e.ts > 2 * 86_400_000) out.push({ token_id: t.id, buy: false, fraction: 1, note: t.phase === 'Pool' && gain >= 20 ? `$${t.ticker} reached its pool: +${fmt(gain)}%` : `Closed $${t.ticker} (${fmt(gain)}%)` })
       }
-      const c = tokens.filter((t) => !held.has(t.id) && t.phase === 'Curve' && t.progress >= 0.7 && t.progress <= 0.97 && t.volume_1h >= 10).sort((a, b) => b.progress - a.progress)[0]
+      const c = tokens.filter((t) => !held.has(t.id) && t.phase === 'Curve' && t.progress >= (small() ? 0 : 0.7) && t.progress <= 0.97 && t.volume_1h >= vol(10)).sort((a, b) => b.progress - a.progress)[0]
       const amount = budgetFor(v, 0.1)
       if (c && amount >= MIN_TRADE) out.push({ token_id: c.id, buy: true, near: amount, note: `$${c.ticker} is ${Math.round(c.progress * 100)}% of the way to its pool` })
       break
@@ -167,7 +180,7 @@ export function decide(strategy: string, v: VaultSnapshot, market: MarketToken[]
         if (steps < targets.length && gain >= targets[steps]) out.push({ token_id: t.id, buy: false, fraction: steps === targets.length - 1 ? 1 : 0.25, note: `Took profit step ${steps + 1} on $${t.ticker}: +${fmt(gain)}%` })
         else if (gain <= -20) out.push({ token_id: t.id, buy: false, fraction: 1, note: `Stopped out of $${t.ticker} at ${fmt(gain)}%` })
       }
-      const c = tokens.filter((t) => !held.has(t.id) && t.phase === 'Pool' && t.change_24h > 0).sort((a, b) => b.volume_1h - a.volume_1h)[0]
+      const c = tokens.filter((t) => !held.has(t.id) && pooled(t) && t.change_24h > 0).sort((a, b) => b.volume_1h - a.volume_1h)[0]
       const amount = Math.min(budgetFor(v, 0.05), v.budget * 0.05)
       if (c && amount >= MIN_TRADE) out.push({ token_id: c.id, buy: true, near: amount, note: `Opened $${c.ticker}; profit is taken at +20%, +40% and +80%` })
       break

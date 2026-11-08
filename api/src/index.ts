@@ -12,6 +12,7 @@
 //
 // The scheduled trigger (every minute) only keeps the clock wound; the clock does the work (clock.ts).
 import type { Env } from './env'
+import { fetchNearUsd } from './lib/price'
 import { cors, fail, HttpError, json } from './http'
 import { handleV1 } from './routes/v1'
 import { handleAgent } from './routes/agent'
@@ -115,6 +116,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       const failed = await env.DB.prepare("SELECT id, method, error, updated FROM jobs WHERE status = 'failed' ORDER BY id DESC LIMIT 20").all()
       return json({ source: env.TX_API_URL ? 'accounts' : 'blocks', state: state.results, jobs: jobs.results, failed: failed.results })
     }
+    if (m === 'GET' && seg[1] === 'price') return json({ price: await fetchNearUsd() })
     if (m === 'GET' && seg[1] === 'probe') {
       // Which public endpoints answer from this worker (they limit shared Cloudflare addresses differently).
       const urls = (new URL(req.url).searchParams.get('urls') || '').split(',').filter((u) => u.startsWith('https://')).slice(0, 8)
