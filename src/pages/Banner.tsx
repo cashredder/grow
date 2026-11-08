@@ -17,12 +17,12 @@ async function render(c: HTMLCanvasElement) {
 
   // A tree drawn once per growth stage, cropped to its outline, optionally dimmed for distance.
   const cache = new Map<string, { off: HTMLCanvasElement; x0: number; y0: number; w: number; h: number }>()
-  const tree = (cap: number, twin: boolean) => {
-    const key = cap + ':' + twin
+  const tree = (cap: number, twin: boolean, shape: number) => {
+    const key = cap + ':' + twin + ':' + shape
     if (cache.has(key)) return cache.get(key)!
     const size = 700, off = document.createElement('canvas'); off.width = size; off.height = size
     const o = off.getContext('2d')!
-    drawTree(o, growth(cap), size, size, twin)
+    drawTree(o, growth(cap), size, size, twin, shape)
     const { data } = o.getImageData(0, 0, size, size)
     let x0 = size, x1 = 0, y0 = size, y1 = 0
     for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (data[(y * size + x) * 4 + 3] > 24) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
@@ -31,7 +31,7 @@ async function render(c: HTMLCanvasElement) {
     return v
   }
   const plant = (cap: number, x: number, ground: number, height: number, dim: number, flip: boolean, twin = false) => {
-    const a = tree(cap, twin), w = (a.w * height) / a.h
+    const a = tree(cap, twin, 100 + Math.floor(rand() * 9000)), w = (a.w * height) / a.h
     ctx.save()
     ctx.translate(x, 0); if (flip) ctx.scale(-1, 1)
     ctx.filter = dim ? `brightness(${1 - dim}) saturate(${1 - dim * 0.5})` : 'none'
@@ -55,13 +55,13 @@ async function render(c: HTMLCanvasElement) {
   ctx.save(); ctx.translate(startX + textW, baseline - 627 * k); ctx.scale(k, k); ctx.fillStyle = LIME; ctx.fill(new Path2D(d)); ctx.restore()
 
   // 2. a forest in front of the words: far trees dim and small, near trees full colour
-  const caps = [20000, 45000, 90000, 160000, 300000, 600000, 1_000_000]
+  // Every tree has its own shape. Bases sit below the frame, so only the crowns rise into view.
+  const caps = [90000, 160000, 300000, 600000, 1_000_000]
   const pick = () => caps[Math.floor(rand() * caps.length)]
-  for (let i = 0; i < 15; i++) plant(pick(), (i / 14) * (W + 60) - 30 + (rand() - 0.5) * 40, 466, 95 + rand() * 55, 0.72, rand() > 0.5, rand() > 0.8)
-  for (let i = 0; i < 10; i++) plant(pick(), (i / 9) * (W + 40) - 20 + (rand() - 0.5) * 60, 492, 130 + rand() * 70, 0.42, rand() > 0.5, rand() > 0.85)
-  const front: [number, number, number][] = [[0.27, 160000, 200], [0.52, 1_000_000, 262], [0.73, 90000, 180], [0.92, 600000, 235]]
-  for (const [x, cap, h] of front) plant(cap, x * W, 516, h, 0, rand() > 0.5)
-  for (const x of [0.4, 0.63, 0.83]) plant(3000, x * W, 500, 34, 0, false)
+  // three layers: a dim far ridge, a middle row, and a few near crowns; heights vary so the skyline rolls
+  for (let i = 0; i < 10; i++) plant(pick(), (i / 9) * (W + 120) - 60 + (rand() - 0.5) * 60, 548, 170 + rand() * 105, 0.74, rand() > 0.5, rand() > 0.8)
+  for (let i = 0; i < 7; i++) plant(pick(), (i / 6) * (W + 100) - 50 + (rand() - 0.5) * 80, 610, 220 + rand() * 90, 0.45, rand() > 0.5, rand() > 0.85)
+  for (let i = 0; i < 5; i++) plant(pick(), (i / 4) * (W + 60) - 30 + (rand() - 0.5) * 70, 668, 250 + rand() * 60, 0, rand() > 0.5)
 
   // 3. leaves on the wind
   const colors = ['#2f6e1e', '#3f8820', '#55a322', '#6dbd21', '#86d41f']

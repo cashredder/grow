@@ -19,9 +19,11 @@ const WAYS = [
   { title: 'Bring your agent', to: '/gardeners?tab=api', text: 'Plug in your bot with an API key.', Art: AgentArt },
 ]
 
-/** A small N mark for "built on NEAR" labels. */
+/** The NEAR logo mark, for the "built on NEAR" labels. */
 const NearMark = () => (
-  <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect width="24" height="24" rx="7" fill="currentColor" /><path d="M7 17V7l10 10V7" stroke="var(--near-chip-bg)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" fill="none" /></svg>
+  <svg viewBox="0 0 90 90" width="14" height="14" aria-hidden="true">
+    <path fill="currentColor" d="M72.2 4.6 53.4 32.5c-1.3 1.9 1.2 4.2 3 2.6l18.5-16.1c.5-.4 1.2-.1 1.2.6v50.3c0 .7-.9 1-1.3.5L20.5 6.2C18.8 4 16.1 2.8 13.3 2.8h-1.9C6.2 2.8 2 7 2 12.2v70.7c0 5.2 4.2 9.4 9.4 9.4 3.3 0 6.3-1.7 8-4.5l18.8-27.9c1.3-1.9-1.2-4.2-3-2.6L16.7 73.4c-.5.4-1.2.1-1.2-.6V22.6c0-.7.9-1 1.3-.5l54.2 64.9c1.8 2.2 4.4 3.4 7.2 3.4h1.9c5.2 0 9.4-4.2 9.4-9.4V10.2c0-5.2-4.2-9.4-9.4-9.4-3.3 0-6.4 1.7-8.2 4.6z" />
+  </svg>
 )
 
 function HowItWorks() {
@@ -45,8 +47,7 @@ function HowItWorks() {
           <div className="how-tiers">
             {TIERS.map((t) => <div key={t.days} className="how-tier"><span>{t.days} days</span><span className="how-tier-bar"><i style={{ width: `${t.width}%` }} /></span><b>{t.weight}</b></div>)}
           </div>
-          <p className="how-note">Selling or sending coins resets their hold time.</p>
-          <Link to="/invite" className="btn ghost how-invite"><Icon d={ICONS.gift} size={18} /><span><b>Invite friends</b><small>Earn NEAR from their trades for 90 days</small></span></Link>
+          <Link to="/invite" className="btn ghost how-invite"><Icon d={ICONS.gift} size={18} />Invite friends</Link>
         </div>
         <div className="card how-agents">
           <div className="how-agents-head">

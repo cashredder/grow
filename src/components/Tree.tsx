@@ -18,8 +18,8 @@ function rng(seed: number) {
   }
 }
 
-function build(twin: boolean): Model {
-  const r = rng(twin ? 41 : 11)
+function build(twin: boolean, seed?: number): Model {
+  const r = rng(seed ?? (twin ? 41 : 11))
   const limbs: Limb[] = []
   const leaves: Leaf[] = []
   const MAX = 5
@@ -43,7 +43,7 @@ function build(twin: boolean): Model {
     }
   }
 
-  const grow = (x: number, y: number, angle: number, len: number, rad: number, depth: number, birth: number) => {
+  const grow = (x: number, y: number, angle: number, len: number, rad: number, depth: number, birth: number, base = true) => {
     const steps = depth === 0 ? 12 : Math.max(4, 8 - depth)
     const end = rad * (depth === 0 ? 0.58 : 0.62)
     const dur = depth === 0 ? 0.15 : 0.085
@@ -51,7 +51,8 @@ function build(twin: boolean): Model {
     let a = angle
     for (let i = 0; i <= steps; i++) {
       const t = i / steps
-      const flare = depth === 0 ? 1 + 0.75 * Math.exp(-t * 11) : 1
+      // The trunk flares where it meets the ground (not where two trunks join into one).
+      const flare = depth === 0 && base ? 1 + 0.75 * Math.exp(-t * 11) : 1
       pts.push(x, y, (rad + (end - rad) * t) * flare)
       a += (r() - 0.5) * (depth === 0 ? 0.11 : 0.34)
       if (depth >= 3) a += a > 0 ? 0.015 : -0.015 // tips droop outward
@@ -105,9 +106,24 @@ function build(twin: boolean): Model {
     limbs.push({ pts, birth: 0.42 + r() * 0.1, dur: 0.38, depth: 0, root: true })
   }
   if (twin) {
-    for (const d of [-1, 1, -1, 1]) addRoot(d, 110 + r() * 110, 22, d * 34)
-    grow(-30, 0, -0.17, 262, 40, 0, 0)
-    grow(30, 0, 0.17, 262, 40, 0, 0)
+    // A crossed token: one tree on two trunks. They stand apart at the ground, lean in, meet, and carry one
+    // shared crown, like two saplings grown together.
+    for (const d of [-1, 1, -1, 1]) addRoot(d, 110 + r() * 110, 24, d * 40)
+    const JOIN = 135
+    for (const d of [-1, 1]) {
+      const pts: number[] = []
+      const steps = 12
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps
+        // From x = ±40 at the ground to ±14 at the join, along a gentle S so they look grown together.
+        const x = d * (40 * (1 - t) ** 1.4 + 14 * t + 5 * Math.sin(t * Math.PI) * (1 - t))
+        const y = -JOIN * t
+        const rad = (35 + (29 - 35) * t) * (1 + 0.6 * Math.exp(-t * 11))
+        pts.push(x, y, rad)
+      }
+      limbs.push({ pts, birth: 0, dur: 0.12, depth: 0 })
+    }
+    grow(0, -JOIN + 8, 0, 150, 50, 0, 0.1, false)
   } else {
     for (const [d, w] of [[-1, 1], [1, 1], [-1, 0.6], [1, 0.6], [1, 0.4]]) addRoot(d, (140 + r() * 80) * w, 26 * (0.5 + w * 0.5), d * 20 * w)
     grow(0, 0, 0, 280, 55, 0, 0)
@@ -447,8 +463,10 @@ function Tree({ growth, twin = false, sway = false, fill = false, framed = false
 }
 
 /** Draws one still tree, for exported images. */
-export function drawTree(ctx: CanvasRenderingContext2D, growthValue: number, W: number, H: number, twin = false) {
-  paint(ctx, model(twin), growthValue, W, H, false, false)
+/** `seed` gives a differently shaped tree; the site always uses the default shape. */
+export function drawTree(ctx: CanvasRenderingContext2D, growthValue: number, W: number, H: number, twin = false, seed?: number) {
+  const m = seed === undefined ? model(twin) : (cache[`${twin}:${seed}`] ??= build(twin, seed))
+  paint(ctx, m, growthValue, W, H, false, false)
 }
 
 export default memo(Tree)

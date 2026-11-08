@@ -80,11 +80,6 @@ export async function renderShareCard(t: Token): Promise<Blob> {
   ctx.clip()
   ctx.fillStyle = '#000'
   ctx.fillRect(WX, WY, S, S)
-  const glow = ctx.createRadialGradient(W / 2, WY + S * 0.6, 10, W / 2, WY + S * 0.6, S * 0.6)
-  glow.addColorStop(0, 'rgba(134, 224, 30, 0.16)')
-  glow.addColorStop(1, 'rgba(134, 224, 30, 0)')
-  ctx.fillStyle = glow
-  ctx.fillRect(WX, WY, S, S)
   const ground = WY + S - 70
   const size = 1000
   const off = document.createElement('canvas')
@@ -180,10 +175,10 @@ export async function renderShareCard(t: Token): Promise<Blob> {
   // Footer: the logo and what grow. is.
   const FY = H - P + 4
   const logo = await logoImage()
-  if (logo) ctx.drawImage(logo, P, FY - 34, 112, 34)
+  if (logo) ctx.drawImage(logo, P, FY - 52, 170, 52)
   else {
     ctx.fillStyle = LIME
-    ctx.font = font(800, 36)
+    ctx.font = font(800, 54)
     ctx.fillText('grow.', P, FY)
   }
   ctx.fillStyle = FAINT

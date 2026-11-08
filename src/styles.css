@@ -477,14 +477,13 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 .share-modal { width: min(520px, calc(100vw - 32px)); display: grid; gap: 14px; }
 .share-preview { border-radius: 14px; overflow: hidden; background: var(--sunken); aspect-ratio: 1; width: min(100%, 440px); justify-self: center; }
 .share-preview img, .share-preview .skeleton { width: 100%; height: 100%; display: block; }
-.share-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.share-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 
 /* Token cards: the full name sits under the ticker */
 .t-card-name { min-width: 0; font-size: 14.5px; font-weight: 550; color: var(--mid); }
 
 /* Home: the invite button and the NEAR labels */
-.how-invite { justify-self: start; display: inline-flex; align-items: center; gap: 12px; height: auto; padding: 12px 18px 12px 14px; border-radius: 16px; text-align: left; }
-.how-invite span { display: grid; gap: 1px; } .how-invite b { font-weight: 650; font-size: 15px; } .how-invite small { font-size: 13px; color: var(--mid); font-weight: 450; }
+.how-invite { justify-self: stretch; width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; height: 50px; border-radius: 16px; font-weight: 650; font-size: 15px; margin-top: 4px; }
 .how-invite svg { color: var(--lime); flex: none; }
 .near-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .near-chip { --near-chip-bg: var(--sunken); display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px 5px 6px; border-radius: 99px; background: var(--near-chip-bg); font-size: 13px; font-weight: 550; color: var(--ink); }
