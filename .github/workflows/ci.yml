@@ -15,6 +15,7 @@ jobs:
     # The real wasm contracts on a local NEAR sandbox node (contracts/e2e).
     runs-on: ubuntu-latest
     needs: contracts
+    timeout-minutes: 25
     defaults: { run: { working-directory: contracts } }
     steps:
       - uses: actions/checkout@v4
@@ -25,7 +26,7 @@ jobs:
       - name: Build the contracts
         run: (cd token && cargo near build non-reproducible-wasm --no-abi) && (cd launchpad && cargo near build non-reproducible-wasm --no-abi)
       - name: Sandbox tests
-        run: cargo test --manifest-path e2e/Cargo.toml -- --nocapture
+        run: cargo test --manifest-path e2e/Cargo.toml -- --nocapture --test-threads=1
         env:
           WASM_DIR: ${{ github.workspace }}/contracts/target/near
   api:

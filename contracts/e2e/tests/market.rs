@@ -6,6 +6,10 @@ use serde_json::{json, Value};
 
 const YOCTO: f64 = 1e24;
 
+fn step(s: &str) {
+    eprintln!("[e2e] {s}");
+}
+
 fn wasm(name: &str) -> Vec<u8> {
     let dir = std::env::var("WASM_DIR").unwrap_or_else(|_| "../target/near".into());
     std::fs::read(format!("{dir}/{name}/{name}.wasm")).unwrap_or_else(|e| panic!("build {name} with cargo near first: {e}"))
@@ -29,8 +33,10 @@ async fn token(lp: &Contract, id: &str) -> anyhow::Result<Value> {
 
 #[tokio::test]
 async fn launch_curve_pool_and_hold_rewards() -> anyhow::Result<()> {
+    step("starting the sandbox");
     let worker = near_workspaces::sandbox().await?;
     let root = worker.root_account()?;
+    step("deploying the launchpad");
     let lp_account = account(&root, "grow", 200).await?;
     let lp = lp_account.deploy(&wasm("grow_launchpad")).await?.into_result()?;
     let owner = account(&root, "owner", 100).await?;
@@ -40,6 +46,7 @@ async fn launch_curve_pool_and_hold_rewards() -> anyhow::Result<()> {
     cfg["token_storage"] = json!("2500000000000000000000000");
     owner.call(lp.id(), "set_config").args_json(json!({ "config": cfg })).transact().await?.into_result()?;
 
+    step("launching OAK");
     let dev = account(&root, "dev", 50).await?;
     dev.call(lp.id(), "create_token")
         .args_json(json!({ "args": { "name": "Old Oak", "ticker": "OAK" } }))
@@ -61,6 +68,7 @@ async fn launch_curve_pool_and_hold_rewards() -> anyhow::Result<()> {
     assert!(near(&alice_coins) > 0.0);
 
     // The whale's buy sells out the curve: it is capped, the rest comes back, and the pool opens in the same call.
+    step("the whale buys out the curve");
     let whale = account(&root, "whale", 6_000).await?;
     let before = balance(&whale).await?;
     whale.call(lp.id(), "buy").args_json(json!({ "token_id": id, "min_out": "1" })).deposit(NearToken::from_near(5_000)).max_gas().transact().await?.into_result()?;
@@ -71,6 +79,7 @@ async fn launch_curve_pool_and_hold_rewards() -> anyhow::Result<()> {
     assert!((3_300.0..3_400.0).contains(&pool_near), "about 3398.6 NEAR raised, less fees, moves into the pool: {pool_near}");
     assert!(spent > 3_300.0 && spent < 3_500.0, "the capped buy spent {spent} NEAR and the rest came back");
 
+    step("selling in the pool");
     // Trading in the pool: the whale sells 1% of its coins at the pool fee.
     let whale_coins: Value = whale.view(&token_account, "ft_balance_of").args_json(json!({ "account_id": whale.id() })).await?.json()?;
     let sell = (whale_coins.as_str().unwrap().parse::<u128>()? / 100).to_string();
@@ -86,15 +95,18 @@ async fn launch_curve_pool_and_hold_rewards() -> anyhow::Result<()> {
     assert!(near(&t2["near_reserve"]) < pool_near, "the sale took NEAR out of the pool");
 
     // Three days later alice's coins count for rewards: push the holders' share of the fees and claim it.
+    step("fast-forwarding three days");
     for _ in 0..12 {
         let h: Value = alice.view(&token_account, "hold_info").args_json(json!({ "account_id": alice.id() })).await?.json()?;
         if h["held_days"].as_u64().unwrap_or(0) >= 3 {
             break;
         }
         worker.fast_forward(30_000).await?;
+        step("  +30000 blocks");
     }
     let h: Value = alice.view(&token_account, "hold_info").args_json(json!({ "account_id": alice.id() })).await?.json()?;
     assert!(h["held_days"].as_u64().unwrap() >= 3, "fast-forwarded three days: {h}");
+    step("pushing and claiming rewards");
     alice.call(lp.id(), "push_rewards").args_json(json!({ "token_id": id })).max_gas().transact().await?.into_result()?;
     let h: Value = alice.view(&token_account, "hold_info").args_json(json!({ "account_id": alice.id() })).await?.json()?;
     let claimable = near(&h["claimable"]);
