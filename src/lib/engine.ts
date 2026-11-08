@@ -14,8 +14,10 @@ export const setNearUsd = (v: number) => {
 }
 
 export interface Trade { id: number; who: string; side: 'buy' | 'sell'; near: number; tokens: number; t: number }
-export interface GardenerAction { id: number; t: number; kind: string; note: string; near: number; tx: string; rejected?: boolean }
+export interface GardenerAction { id: number; t: number; kind: string; note: string; near: number; tx: string; rejected?: boolean; aiId?: number }
 export interface Token {
+  /** Live: the token's AI treasurer (its own gardener). */
+  treasury?: { cash: number; ai: import('./store').AiDecision[] }
   id: string; name: string; ticker: string; desc: string; image?: string; hue: number
   dev: string; coDev?: string; createdAt: number; feePct: number
   phase: 'curve' | 'pool'; base: number; tok: number; supply: number

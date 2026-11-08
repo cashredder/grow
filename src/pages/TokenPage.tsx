@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AiChip, AiDecisions } from '../components/AiProof'
 import { Link, useParams } from 'react-router-dom'
 import Tree from '../components/Tree'
 import { Chart, CopyCa, Cover, ICONS, Icon, Num, PageTabs, Star, Tabs, TokenSocials, UserAvatar, ago, fmtAmt, fmtNear, fmtPrice, fmtUsd } from '../components/ui'
@@ -160,7 +161,7 @@ export default function TokenPage() {
             <Stat label="Burned">{fmtAmt(t.burned)}</Stat>
           </div>
           <div className="card">
-            <PageTabs<Tab> value={tab} onChange={setTab} options={[{ id: 'comments', label: 'Comments' }, { id: 'trades', label: 'Trades' }, { id: 'holders', label: 'Holders' }, { id: 'gardener', label: 'Gardener' }]} />
+            <PageTabs<Tab> value={tab} onChange={setTab} options={[{ id: 'comments', label: 'Comments' }, { id: 'trades', label: 'Trades' }, { id: 'holders', label: 'Holders' }, { id: 'gardener', label: 'Treasurer' }]} />
             <div className="tab-body" key={tab}>
               {tab === 'comments' && <Comments t={t} />}
               {tab === 'trades' && (t.trades.length ? t.trades.slice(0, 18).map((x) => (
@@ -172,13 +173,17 @@ export default function TokenPage() {
                   <div className="line holder" key={who}><small className="muted rank">{i + 1}</small><Link to={`/user/${who}`} className="ellipsis grow-1">{who}{who === t.dev ? ' · dev' : ''}</Link><span className="holder-bar"><i style={{ width: `${Math.min(100, pct * 6)}%` }} /></span><span>{pct.toFixed(2)}%</span></div>
                 )
               })}
-              {tab === 'gardener' && (!t.gardener ? <p className="muted">This token launched without a gardener.</p> : <>
-                <p className="muted">Every action this agent takes with dev rewards appears here. Limits are enforced by the contract.</p>
+              {tab === 'gardener' && (!t.gardener ? <p className="muted">This token launched without an AI treasurer.</p> : <>
+                <p className="muted">The dev's share of the fees goes to this token's treasury. A NEAR AI model decides how to use it: buybacks that burn coins, rewards for holders, and the dev's pay (at most 20% a day). The contract enforces the limits, and every decision is signed inside a TEE.</p>
+                {t.treasury && <div className="row between treasury-cash"><small className="muted">Treasury</small><b>{t.treasury.cash.toFixed(4)} NEAR</b></div>}
+                <h4 className="mt-s">Decisions</h4>
+                <AiDecisions list={t.treasury?.ai} empty="The treasurer decides about every 30 minutes once the treasury has NEAR." />
+                <h4 className="mt-s">Actions</h4>
                 {t.log.map((a) => (
                   <div className="log" key={a.id}>
-                    <div className="row between"><b className={a.rejected ? 'down' : ''}>{a.kind}</b><small className="muted">{ago(a.t)} ago</small></div>
+                    <div className="row between"><b className={a.rejected ? 'down' : ''}>{a.kind} <AiChip id={a.aiId} /></b><small className="muted">{ago(a.t)} ago</small></div>
                     <p className="muted">{a.note}</p>
-                    <small className="muted">{a.near > 0 ? `${a.near.toFixed(2)} NEAR · ` : ''}tx {a.tx}</small>
+                    {a.near > 0 && <small className="muted">{a.near < 1 ? a.near.toFixed(4) : a.near.toFixed(2)} NEAR{a.tx ? ` · tx ${a.tx}` : ''}</small>}
                   </div>
                 ))}
               </>)}

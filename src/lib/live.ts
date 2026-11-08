@@ -2,7 +2,7 @@
 // action is a wallet transaction or an API call. The data is shaped like the built-in market's, so pages work
 // the same in both modes.
 import { api, ApiError, session, setSession, streamUrl } from './api'
-import { LAUNCHPAD } from './config'
+import { API_URL, LAUNCHPAD } from './config'
 import { setNearUsd, type GardenerAction, type Token } from './engine'
 import { failureText, fromUnits, fromYocto, nearBalance, units, view, yocto } from './chain'
 import type { Call } from './near'
@@ -16,7 +16,7 @@ const signIn = async (id: string) => (await wallet()).signIn(id)
 const signOut = async () => (await wallet()).signOut()
 const signedInAccount = async () => (await wallet()).signedInAccount()
 const signMessage = async (m: string, n: Uint8Array, r: string) => (await wallet()).signMessage(m, n, r)
-import { DAY, getState, patch, toast, type Copy, type Crossing, type Feed, type Hired, type House, type Lot, type NewToken, type Notice, type ProfileLinks } from './store'
+import { DAY, getState, patch, toast, type AiDecision, type Copy, type Crossing, type Feed, type Hired, type House, type Lot, type NewToken, type Notice, type ProfileLinks } from './store'
 
 // ---------------------------------------------------------------- shapes from the API
 
@@ -65,8 +65,29 @@ function toHouse(v: ApiVault, prev?: House): House {
   }
 }
 
+const KINDS: Record<string, string> = { buy: 'Buy', sell: 'Sell', buyback: 'Buyback', rewards: 'Holder rewards', pay_dev: 'Dev pay' }
+const DONE: Record<string, string> = { buy: 'Bought', sell: 'Sold', buyback: 'Bought back', rewards: 'Rewarded holders of', pay_dev: 'Paid the dev of' }
+
+/** Gardener log rows. A note ending in "#ai<id>" came from a NEAR AI decision: the tag becomes a link to its proof. */
 const logOf = (rows: { ts: number; ticker?: string; token_id: string; side: string; near: number; note: string | null }[]): GardenerAction[] =>
-  rows.map((r, i) => ({ id: r.ts + i, t: r.ts, kind: r.side === 'buy' ? 'Buy' : 'Sell', note: r.note || `${r.side === 'buy' ? 'Bought' : 'Sold'} $${r.ticker ?? r.token_id}`, near: r.near, tx: '' }))
+  rows.map((r, i) => {
+    const m = (r.note ?? '').match(/\s*#ai(\d+)$/)
+    const note = m ? (r.note ?? '').slice(0, m.index) : r.note
+    return { id: r.ts + i, t: r.ts, kind: KINDS[r.side] ?? r.side, note: note || `${DONE[r.side] ?? r.side} $${r.ticker ?? r.token_id}`, near: r.near, tx: '', aiId: m ? Number(m[1]) : undefined }
+  })
+
+interface ApiAi { id: number; ts: number; kind: string; model: string; signing_address: string | null; signature_ok: boolean; attested: boolean; error: string | null; output: { decisions?: { token_id: string; buy: boolean; near?: number; fraction?: number; note: string }[]; actions?: { action: string; near: number; note: string }[] } | null }
+
+const aiOf = (rows: ApiAi[] = []): AiDecision[] =>
+  rows.map((d) => {
+    const parts = d.kind === 'treasury'
+      ? (d.output?.actions ?? []).map((a) => `${KINDS[a.action] ?? a.action} ${a.near} NEAR: ${a.note}`)
+      : (d.output?.decisions ?? []).map((x) => `${x.buy ? `Buy ${x.token_id} for ${x.near} NEAR` : `Sell ${Math.round((x.fraction ?? 1) * 100)}% of ${x.token_id}`}: ${x.note}`)
+    return { id: d.id, ts: d.ts, kind: d.kind, model: d.model, signing_address: d.signing_address, signature_ok: d.signature_ok, attested: d.attested, error: d.error, summary: d.error ? 'The model did not answer; the rules decided instead.' : parts.join(' · ') || 'Decided to wait.' }
+  })
+
+/** Where anyone can read a NEAR AI decision with its request, response and signature. */
+export const aiProofUrl = (id: number) => `${API_URL}/v1/ai/decisions/${id}`
 
 // ---------------------------------------------------------------- loading
 
@@ -105,8 +126,11 @@ export async function loadToken(id: string) {
   t.holders = Object.fromEntries(holders.holders.map((h) => [h.account, h.balance]))
   t.comments = comments.comments.map((c) => ({ id: c.id, who: c.account, text: c.text, t: c.ts }))
   if (one.token.dev_vault !== null) {
-    const g = await api<{ log: Parameters<typeof logOf>[0] }>(`/v1/gardeners/${one.token.dev_vault}`).catch(() => null)
-    if (g) t.log = logOf(g.log)
+    const g = await api<{ log: Parameters<typeof logOf>[0]; ai?: ApiAi[]; gardener: ApiVault }>(`/v1/gardeners/${one.token.dev_vault}`).catch(() => null)
+    if (g) {
+      t.log = logOf(g.log)
+      t.treasury = { cash: g.gardener.cash, ai: aiOf(g.ai) }
+    }
   }
   patch({ tokens: { ...getState().tokens, [id]: t } })
 }
@@ -118,9 +142,10 @@ export async function loadGardeners() {
 }
 
 export async function loadGardener(id: string) {
-  const r = await api<{ gardener: ApiVault; log: Parameters<typeof logOf>[0]; history: { ts: number; equity: number }[] }>(`/v1/gardeners/${encodeURIComponent(id)}`)
+  const r = await api<{ gardener: ApiVault; log: Parameters<typeof logOf>[0]; history: { ts: number; equity: number }[]; ai?: ApiAi[] }>(`/v1/gardeners/${encodeURIComponent(id)}`)
   const h = toHouse(r.gardener)
   h.log = logOf(r.log)
+  h.ai = aiOf(r.ai)
   if (r.history.length > 1) h.history = r.history.map((p) => [p.ts, p.equity])
   const house = getState().house.filter((x) => x.id !== h.id)
   patch({ house: [...house, h] })

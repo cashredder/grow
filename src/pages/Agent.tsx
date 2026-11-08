@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Art } from '../components/Art'
-import { ICONS, Icon, Slider, Spark, ago, fmtNear, fmtUsd } from '../components/ui'
-import { FIRE_DRAWDOWN, STRATEGIES, copyAgent, stopCopy, useS } from '../lib/store'
+import { ICONS, Icon, Slider, Spark, ago, fmtNear } from '../components/ui'
+import { FIRE_DRAWDOWN, copyAgent, stopCopy, strategyOf, useS } from '../lib/store'
+import { AiChip, AiDecisions } from '../components/AiProof'
 import { drawdown, pnlPct } from './Gardeners'
 import { LIVE } from '../lib/config'
 import { loadGardener } from '../lib/live'
@@ -46,7 +47,8 @@ export default function Agent() {
   }, [id])
   if (!h && loading) return <div className="page"><div className="skeleton" /></div>
   if (!h) return <div className="page center"><h1>Gardener not found</h1><Link className="btn primary" to="/gardeners">See gardeners</Link></div>
-  const st = STRATEGIES.find((s) => s.id === h.strategy)
+  const st = strategyOf(h.strategy)
+  const isAi = h.strategy === 'ai' || h.strategy === 'treasurer'
   const pnl = pnlPct(h)
   const dd = drawdown(h)
   return (
@@ -59,7 +61,7 @@ export default function Agent() {
       </div>
       <div className="stack">
         <div className="card">
-          <div className="row between"><div><small className="muted">Capital</small><div className="big-num xl">{fmtUsd(h.equity)}</div></div><b className={`agent-pnl large ${pnl >= 0 ? 'up' : 'down'}`}>{pnl >= 0 ? '+' : ''}{pnl.toFixed(1)}%</b></div>
+          <div className="row between"><div><small className="muted">Capital</small><div className="big-num xl">{fmtNear(h.equity)}</div></div><b className={`agent-pnl large ${pnl >= 0 ? 'up' : 'down'}`}>{pnl >= 0 ? '+' : ''}{pnl.toFixed(1)}%</b></div>
           <div className="agent-chart"><Spark values={h.history.map((p) => p[1])} w={900} h={200} /></div>
         </div>
         {h.status !== 'fired' && <CopyPanel agentId={h.id} name={h.name} />}
@@ -72,13 +74,20 @@ export default function Agent() {
         <div className="stats">
           <div className="stat"><small>Win rate</small><b>{Math.round((h.wins / Math.max(1, h.trades)) * 100)}%</b></div>
           <div className="stat"><small>Trades</small><b>{h.trades}</b></div>
-          <div className="stat"><small>Peak</small><b>{fmtUsd(h.peak)}</b></div>
-          <div className="stat"><small>Started with</small><b>{fmtUsd(h.start)}</b></div>
+          <div className="stat"><small>Peak</small><b>{fmtNear(h.peak)}</b></div>
+          <div className="stat"><small>Started with</small><b>{fmtNear(h.start)}</b></div>
         </div>
+        {isAi && (
+          <div className="card">
+            <div className="row between"><h3>AI decisions</h3><a className="muted small-link" href="https://docs.near.ai/cloud/verification" target="_blank" rel="noreferrer">How to verify</a></div>
+            <p className="muted mt-s">A model on NEAR AI Cloud makes each decision inside a TEE and signs its answer. The contract still enforces every limit.</p>
+            <AiDecisions list={h.ai} empty="The first decision will appear here." />
+          </div>
+        )}
         <div className="card">
           <h3>Latest trades</h3>
           {h.log.length === 0 && <p className="muted mt-s">New trades will appear here.</p>}
-          <div className="mt-s">{h.log.slice(0, 12).map((a) => <div className="line" key={a.id}><span className={`status-word ${a.kind === 'Gain' ? 'up' : 'down'}`}>{a.kind}</span><span className="grow-1 ellipsis">{a.note}</span><span>{a.near.toFixed(1)} NEAR</span><small className="muted time">{ago(a.t)}</small></div>)}</div>
+          <div className="mt-s">{h.log.slice(0, 12).map((a) => <div className="line" key={a.id}><span className={`status-word ${a.kind === 'Gain' ? 'up' : 'down'}`}>{a.kind}</span><span className="grow-1 ellipsis">{a.note}</span><AiChip id={a.aiId} /><span>{a.near < 1 ? a.near.toFixed(3) : a.near.toFixed(1)} NEAR</span><small className="muted time">{ago(a.t)}</small></div>)}</div>
         </div>
       </div>
     </div>

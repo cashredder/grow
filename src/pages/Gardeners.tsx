@@ -2,9 +2,9 @@ import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Art } from '../components/Art'
 import { ConnectGate, ICONS, Icon, Page, PageTabs, Spark, Tabs, ago, fmtNear } from '../components/ui'
-import { FIRE_DRAWDOWN, STRATEGIES, asPublicAgent, createApiKey, hire, revokeApiKey, stopCopy, stopHired, toast, togglePause, useS, type Hired, type House } from '../lib/store'
+import { FIRE_DRAWDOWN, STRATEGIES, strategyOf, asPublicAgent, createApiKey, hire, revokeApiKey, stopCopy, stopHired, toast, togglePause, useS, type Hired, type House } from '../lib/store'
 
-export const strategyName = (id: string) => STRATEGIES.find((s) => s.id === id)?.name ?? 'Custom strategy'
+export const strategyName = (id: string) => strategyOf(id)?.name ?? 'Custom strategy'
 export const pnlPct = (h: House) => (h.equity / h.start - 1) * 100
 export const drawdown = (h: House) => (1 - h.equity / h.peak) * 100
 const STATUS = { active: 'Working', warning: 'On warning', fired: 'Fired' }

@@ -7,6 +7,7 @@ import { CURVE_END_TOK, POOL_TOK, SUPPLY, V_BASE, V_TOK, holdWeight, price, quot
 
 export const DAY = 86_400_000
 export const STRATEGIES = [
+  { id: 'ai', name: 'AI Trader', risk: 'Medium', blurb: 'A NEAR AI model reads the market and trades within your limits. Every decision is signed inside a TEE.' },
   { id: 'steady', name: 'Steady', risk: 'Low', blurb: 'Buys a fixed amount of top tokens on a schedule.' },
   { id: 'trend', name: 'Trend Rider', risk: 'High', blurb: 'Buys tokens gaining volume and unique traders.' },
   { id: 'dip', name: 'Dip Buyer', risk: 'Medium', blurb: 'Buys sharp drops on tokens with strong holders.' },
@@ -14,11 +15,16 @@ export const STRATEGIES = [
   { id: 'exit', name: 'Take Profit', risk: 'Low', blurb: 'Takes profit in steps at set price targets.' },
 ] as const
 
+/** A token's own gardener: not offered for hire, chosen at launch. */
+export const TREASURER = { id: 'treasurer', name: 'AI Treasurer', risk: 'Low', blurb: "A NEAR AI model runs the token's treasury: buybacks, holder rewards and the dev's pay, within limits the contract enforces." } as const
+export const strategyOf = (id: string) => (id === 'treasurer' || id === 'dev' ? TREASURER : STRATEGIES.find((s) => s.id === id))
+
 export const FIRE_DRAWDOWN = 30
 export const WARN_DRAWDOWN = 18
 
 export interface Lot { amt: number; t: number }
-export interface House { id: string; name: string; art: string; strategy: string; status: 'active' | 'warning' | 'fired'; start: number; equity: number; peak: number; trades: number; wins: number; hiredAt: number; firedAt?: number; history: [number, number][]; log: GardenerAction[]; owner?: string; copiers: number }
+export interface AiDecision { id: number; ts: number; kind: string; model: string; signing_address: string | null; signature_ok: boolean; attested: boolean; error: string | null; summary: string }
+export interface House { ai?: AiDecision[]; id: string; name: string; art: string; strategy: string; status: 'active' | 'warning' | 'fired'; start: number; equity: number; peak: number; trades: number; wins: number; hiredAt: number; firedAt?: number; history: [number, number][]; log: GardenerAction[]; owner?: string; copiers: number }
 export interface Copy { id: string; agentId: string; perTrade: number; budget: number; stopLoss: number; pnl: number; trades: number; stopped: boolean; startedAt: number; log: GardenerAction[] }
 export interface Hired { id: string; name: string; strategy: string; custom?: string; budget: number; dailyLimit: number; stopLoss: number; until: number; allowed: 'all' | 'graduated'; paused: boolean; fired: boolean; pnl: number; trades: number; wins: number; createdAt: number; history: [number, number][]; log: GardenerAction[]; apiKeyId?: string }
 export interface ApiKey { id: string; name: string; hint: string; createdAt: number; dailyLimit: number }

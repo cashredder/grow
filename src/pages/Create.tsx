@@ -73,7 +73,7 @@ export default function Create() {
                 {pct > 0 && <Tabs value={to} onChange={setTo} options={[{ id: 'holders', label: 'To holders' }, { id: 'buyback', label: 'Buy back and burn' }]} />}
                 <small className="muted">Fixed for the life of the token.</small>
               </div>
-              <div className="field"><Check checked={gardener} onChange={setGardener}>Connect a gardener to manage dev rewards</Check><small className="muted">This can only be chosen now, at launch.</small></div>
+              <div className="field"><Check checked={gardener} onChange={setGardener}>Add an AI treasurer</Check><small className="muted">Your share of the fees goes to a treasury that a NEAR AI model runs: buybacks, holder rewards and your pay (at most 20% a day). Every decision is signed in a TEE. This can only be chosen now, at launch.</small></div>
             </div>
           </details>
           <div className="quote">
