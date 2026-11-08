@@ -25,3 +25,8 @@ dist-ssr
 
 # Local tool settings
 .claude/
+
+# Cloudflare credentials, never committed
+.env
+.env.cloudflare*
+.wrangler/
