@@ -1,5 +1,6 @@
 // Open, read-only data for the site, bots and aggregators. Every number comes from indexed contract events;
 // quotes are live contract views.
+import { DEFAULT_MODEL } from '../agents/nearai'
 import type { Env } from '../env'
 import { fail, isAccount, json, num } from '../http'
 import { view } from '../near/rpc'
@@ -62,6 +63,26 @@ export async function handleV1(req: Request, env: Env, url: URL): Promise<Respon
         'GET /v1/tokens/{id}/holders', 'GET /v1/tokens/{id}/candles?tf=1s|5s|1m|5m|15m|30m|1h|4h|1d', 'GET /v1/tokens/{id}/quote?side=buy|sell&amount=',
         'GET /v1/tokens/{id}/comments', 'GET /v1/feed', 'GET /v1/leaderboard?tab=traders|devs|gardeners', 'GET /v1/gardeners?tab=all|house|community',
         'GET /v1/gardeners/{id}', 'GET /v1/users/{account}', 'GET /v1/stream (WebSocket)',
+        'GET /v1/ai', 'GET /v1/ai/decisions/{id} (NEAR AI request, response and signature, to verify)',
+      ],
+    })
+  }
+
+  if (parts[0] === 'ai' && !parts[1]) {
+    const n = await db.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(signature_ok), 0) AS signed FROM ai_decisions').first<{ n: number; signed: number }>()
+    return json({ provider: 'NEAR AI Cloud', model: env.AI_MODEL || DEFAULT_MODEL, enabled: !!env.NEARAI_KEY, decisions: n?.n ?? 0, signed: n?.signed ?? 0, verify: 'https://docs.near.ai/cloud/verification' })
+  }
+
+  if (parts[0] === 'ai' && parts[1] === 'decisions' && parts[2]) {
+    const d = await db.prepare('SELECT * FROM ai_decisions WHERE id = ?').bind(Number(parts[2])).first<Record<string, unknown>>()
+    if (!d) fail(404, 'no such decision')
+    return json({
+      decision: { ...d, signature_ok: !!d!.signature_ok, attested: !!d!.attested, output: d!.output ? JSON.parse(String(d!.output)) : null },
+      how_to_verify: [
+        'request_hash = sha256(request) and response_hash = sha256(response), over these exact strings (UTF-8).',
+        'signed_text must be "<model>:<request_hash>:<response_hash>" (model TEE) or "<request_hash>:<response_hash>" (NEAR AI gateway).',
+        'Recover the EIP-191 signer of signed_text from signature (65 bytes): it must equal signing_address.',
+        'GET https://cloud-api.near.ai/v1/attestation/report?signing_algo=ecdsa&nonce=<64 hex>&model=<model>&provider=near names signing_address; verify its intel_quote with dcap-qvl (docs.near.ai/cloud/verification).',
       ],
     })
   }
@@ -200,7 +221,8 @@ export async function handleV1(req: Request, env: Env, url: URL): Promise<Respon
     if (!v || (v as { kind: string }).kind === 'Copy') fail(404, 'no such gardener')
     const log = await db.prepare('SELECT l.ts, l.token_id, k.ticker, l.side, l.near, l.tokens, l.note FROM vault_log l LEFT JOIN tokens k ON k.id = l.token_id WHERE l.vault_id = ? ORDER BY l.id DESC LIMIT 50').bind(id).all()
     const history = await db.prepare('SELECT ts, equity FROM vault_equity WHERE vault_id = ? ORDER BY ts ASC LIMIT 2000').bind(id).all()
-    return json({ gardener: gardenerOut(v!), log: log.results, history: history.results })
+    const ai = await db.prepare('SELECT id, ts, kind, model, signing_address, signature_ok, attested, output, error FROM ai_decisions WHERE vault_id = ? ORDER BY id DESC LIMIT 20').bind(id).all<{ output: string | null; signature_ok: number; attested: number }>()
+    return json({ gardener: gardenerOut(v!), log: log.results, history: history.results, ai: ai.results.map((d) => ({ ...d, signature_ok: !!d.signature_ok, attested: !!d.attested, output: d.output ? JSON.parse(d.output) : null })) })
   }
 
   if (parts[0] === 'users' && parts[1]) {

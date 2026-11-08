@@ -119,3 +119,67 @@ describe('strategies', () => {
     expect(remember(st, d, market, now).entries.a.steps).toBe(1)
   })
 })
+
+describe('NEAR AI decisions', async () => {
+  const { secp256k1 } = await import('@noble/curves/secp256k1')
+  const { keccak_256 } = await import('@noble/hashes/sha3')
+  const { recoverAddress, signedTexts, jsonIn } = await import('../src/agents/nearai')
+  const { aiTrades, aiTreasury } = await import('../src/agents/ai')
+  const hex = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, '0')).join('')
+
+  function personalSign(text: string, sk: Uint8Array) {
+    const msg = new TextEncoder().encode(text)
+    const digest = keccak_256(new Uint8Array([...new TextEncoder().encode(`\x19Ethereum Signed Message:\n${msg.length}`), ...msg]))
+    const sig = secp256k1.sign(digest, sk)
+    return '0x' + hex(sig.toCompactRawBytes()) + (27 + sig.recovery).toString(16)
+  }
+
+  it('recovers the EIP-191 signer like NEAR AI verification expects', () => {
+    const sk = secp256k1.utils.randomPrivateKey()
+    const address = '0x' + hex(keccak_256(secp256k1.getPublicKey(sk, false).slice(1)).slice(-20))
+    const [text] = signedTexts('z/model', 'a'.repeat(64), 'b'.repeat(64))
+    expect(text).toBe(`z/model:${'a'.repeat(64)}:${'b'.repeat(64)}`)
+    expect(recoverAddress(text, personalSign(text, sk))).toBe(address)
+    expect(recoverAddress(text + 'x', personalSign(text, sk))).not.toBe(address)
+  })
+
+  it('reads JSON out of a chatty answer', () => {
+    expect(jsonIn<{ a: number }>('<think>hmm {"no":1}</think>Sure: ```json\n{"a": 2}\n```')).toEqual({ a: 2 })
+    expect(jsonIn('no json here')).toBe(null)
+  })
+
+  // A fake NEAR AI Cloud and a database that only records what is saved.
+  function env(answer: object) {
+    const saved: unknown[] = []
+    globalThis.fetch = (async (url: string) => {
+      if (String(url).endsWith('/chat/completions')) return new Response(JSON.stringify({ id: 'chat-1', choices: [{ message: { content: JSON.stringify(answer) } }] }))
+      // No signature for this chat (a 2xx with error_code): the decision is kept as unverified.
+      return new Response(JSON.stringify({ error_code: 'unavailable', message: 'no signature' }))
+    }) as typeof fetch
+    const db = { prepare: () => ({ bind: (...a: unknown[]) => ({ first: async () => (saved.push(a), { id: saved.length }), run: async () => ({}) }) }) }
+    return { e: { NEARAI_KEY: 'k', AI_MODEL: 'm', DB: db } as never, saved }
+  }
+  const t = (o: Partial<MarketToken>): MarketToken => ({ id: 'a', ticker: 'A', phase: 'Curve', price: 1, mcap: 1000, progress: 0.4, holders: 30, volume_1h: 5, buyers_1h: 3, change_1h: 2, change_24h: 4, high_24h: 1, ...o })
+  const v = (o: Partial<VaultSnapshot>): VaultSnapshot => ({ id: 7, kind: 'User', strategy: 'ai', cash: 10, equity: 10, budget: 10, daily_limit: 5, spent_today: 0, allowed: 'All', positions: [], ...o })
+
+  it('keeps only allowed AI trades, within the vault limits', async () => {
+    const { e, saved } = env({ decisions: [{ token_id: 'a', side: 'buy', near: 50, reason: 'Holders are growing' }, { token_id: 'ghost', side: 'buy', near: 1 }, { token_id: 'b', side: 'sell', fraction: 0.5 }] })
+    const r = await aiTrades(e, v({}), [t({}), t({ id: 'b' })], { entries: {} }, Date.now())
+    // 20% of equity at most, unknown tokens and sells of coins it does not hold are dropped.
+    expect(r.decisions).toEqual([{ token_id: 'a', buy: true, near: 2, note: 'Holders are growing' }])
+    expect(r.aiId).toBe(1)
+    expect(saved).toHaveLength(1)
+  })
+
+  it('the treasurer stays within a quarter of the treasury and the dev limit', async () => {
+    const { e } = env({ actions: [{ action: 'pay_dev', near: 9, reason: 'Healthy week' }, { action: 'buyback', near: 9 }, { action: 'withdraw', near: 1 }] })
+    const r = await aiTreasury(e, v({ kind: 'Dev', strategy: 'treasurer', cash: 4, daily_limit: 100 }), t({}))
+    expect(r.actions).toEqual([{ action: 'pay_dev', near: 0.8, note: 'Healthy week' }, { action: 'buyback', near: 0.2, note: 'AI treasury decision' }])
+  })
+
+  it('without a key the treasurer follows the rules', async () => {
+    const r = await aiTreasury({ DB: {} } as never, v({ kind: 'Dev', cash: 2, daily_limit: 100 }), t({ price: 0.8, high_24h: 1 }))
+    expect(r.actions[0]).toMatchObject({ action: 'buyback', near: 0.3 })
+    expect(r.aiId).toBe(null)
+  })
+})

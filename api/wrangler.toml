@@ -112,6 +112,8 @@ NEAR_USD_FALLBACK = "2.5"
 CLOCK_EVERY_MS = "2000"
 AGENTS_ENABLED = "true"
 HOUSE_BUDGET_NEAR = "5"
+MIN_TRADE_NEAR = "0.05"
+AI_MODEL = "zai-org/GLM-5.1-FP8"
 
 [[env.testnet.d1_databases]]
 binding = "DB"

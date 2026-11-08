@@ -434,6 +434,27 @@ export async function applyEvents(env: Env, events: ChainEvent[]): Promise<Appli
         feed.push({ type: 'vault_trade', data: { vault_id: v.id, name: v.name, token_id: tid, side: str(d.side), near, note: d.note ?? null, ts: e.ts, seq: Number(d.seq ?? 0), copied: !(d.copied_from === null || d.copied_from === undefined) } })
         break
       }
+      case 'treasury': {
+        // A token treasurer spent NEAR on its token: into the buyback pool, the holders' rewards, or to the dev.
+        const v = vaults.get(Number(d.vault_id))
+        const near = toNear(raw(d.near))
+        if (t && str(d.action) === 'buyback') t.buyback_pending = Number(t.buyback_pending || 0) + near
+        if (t && str(d.action) === 'rewards') {
+          t.holder_pending = Number(t.holder_pending || 0) + near
+          t.holder_fees = Number(t.holder_fees || 0) + near
+        }
+        if (t) touchedTokens.add(tid)
+        if (!v) break
+        v.cash = toNear(raw(d.cash))
+        touchedVaults.add(v.id)
+        stmts.push(
+          db
+            .prepare('INSERT INTO vault_log (vault_id, ts, receipt, token_id, side, near, tokens, note, seq, copied_from) VALUES (?, ?, ?, ?, ?, ?, 0, ?, 0, NULL)')
+            .bind(v.id, e.ts, e.receipt, tid, str(d.action), near, d.note ? str(d.note) : null),
+        )
+        feed.push({ type: 'treasury', data: { vault_id: v.id, name: v.name, token_id: tid, action: str(d.action), near, note: d.note ?? null, ts: e.ts } })
+        break
+      }
       case 'vault_equity': {
         const v = vaults.get(Number(d.vault_id))
         if (!v) break

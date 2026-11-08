@@ -133,3 +133,12 @@ CREATE TABLE IF NOT EXISTS prices (key TEXT PRIMARY KEY, value REAL NOT NULL, ts
 
 -- Files when no R2 bucket is bound (see src/lib/blobs.ts).
 CREATE TABLE IF NOT EXISTS files (key TEXT PRIMARY KEY, type TEXT NOT NULL, data BLOB NOT NULL, ts INTEGER NOT NULL);
+
+-- Gardener decisions made with NEAR AI Cloud, with what is needed to verify them (src/agents/nearai.ts).
+CREATE TABLE IF NOT EXISTS ai_decisions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, vault_id INTEGER NOT NULL, ts INTEGER NOT NULL, kind TEXT NOT NULL, model TEXT NOT NULL,
+  chat_id TEXT, request TEXT NOT NULL, response TEXT NOT NULL, request_hash TEXT, response_hash TEXT, signed_text TEXT,
+  signature TEXT, signing_address TEXT, signature_ok INTEGER NOT NULL DEFAULT 0, attested INTEGER NOT NULL DEFAULT 0,
+  output TEXT, error TEXT
+);
+CREATE INDEX IF NOT EXISTS ai_decisions_vault ON ai_decisions (vault_id, ts);

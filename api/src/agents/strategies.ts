@@ -57,9 +57,16 @@ export const STRATEGIES: Record<string, { name: string; risk: string; every_ms: 
   grad: { name: 'Graduation', risk: 'High', every_ms: 10 * 60_000, blurb: 'Enters tokens close to moving into their pool.' },
   exit: { name: 'Take Profit', risk: 'Low', every_ms: 4 * 3_600_000, blurb: 'Takes profit in steps at set price targets.' },
   dev: { name: 'Dev gardener', risk: 'Low', every_ms: 30 * 60_000, blurb: "Supports its own token on dips and trims on strength." },
+  ai: { name: 'AI Trader', risk: 'Medium', every_ms: 15 * 60_000, blurb: 'A NEAR AI model reads the market and trades within your limits. Every decision is signed in a TEE.' },
+  treasurer: { name: 'AI Treasurer', risk: 'Low', every_ms: 30 * 60_000, blurb: "A NEAR AI model runs the token's treasury: buybacks, holder rewards and the dev's pay, within on-chain limits." },
 }
 
-const MIN_TRADE = 0.5
+let MIN_TRADE = 0.5
+/** The smallest trade (MIN_TRADE_NEAR); testnet gardeners hold a few NEAR, so it is set lower there. */
+export const setMinTrade = (near: number) => {
+  if (near > 0) MIN_TRADE = near
+}
+export const minTrade = () => MIN_TRADE
 const MAX_POSITION_SHARE = 0.25
 
 const fmt = (n: number) => (Math.abs(n) >= 10 ? n.toFixed(0) : n.toFixed(1))

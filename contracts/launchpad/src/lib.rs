@@ -16,6 +16,7 @@ mod cross;
 mod events;
 mod market;
 mod quick;
+mod treasury;
 mod vault;
 
 #[cfg(test)]

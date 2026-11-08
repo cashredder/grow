@@ -20,9 +20,15 @@ export interface Env {
   CLOCK_EVERY_MS: string
   AGENTS_ENABLED: string
   HOUSE_BUDGET_NEAR: string
+  /** Smallest gardener trade in NEAR (rules strategies). Default 0.5; small on testnet. */
+  MIN_TRADE_NEAR?: string
+  /** NEAR AI Cloud model for AI gardeners (see agents/nearai.ts). */
+  AI_MODEL?: string
 
   RELAYER_KEY?: string
   HOUSE_FUNDER_KEY?: string
   ADMIN_TOKEN?: string
   SESSION_SALT?: string
+  /** NEAR AI Cloud API key: AI gardeners decide with it; without it they fall back to rules. */
+  NEARAI_KEY?: string
 }

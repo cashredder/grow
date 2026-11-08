@@ -510,3 +510,73 @@ fn a_limited_key_cannot_withdraw() {
     at("alice.near", T0, 0);
     let _ = l.withdraw_trade(None);
 }
+
+// ---------------------------------------------------------------- token treasurer
+
+use crate::treasury::TreasuryAction;
+
+/// A token with a treasurer (its own gardener) that trading fees have funded.
+fn funded_treasury() -> (Launchpad, String, u64) {
+    let mut l = setup();
+    let id = launch(&mut l, "dev.near", "OAK", true, T0);
+    let vid = l.token(&id).dev_vault.unwrap();
+    for i in 0..5 {
+        buy(&mut l, &format!("b{i}.near"), &id, 200, T0 + 120_000 + i);
+    }
+    assert!(l.get_vault(vid).unwrap().vault.cash.0 > 2 * ONE_NEAR, "fees fund the treasurer");
+    (l, id, vid)
+}
+
+#[test]
+fn the_treasurer_funds_buybacks_and_holder_rewards() {
+    let (mut l, id, vid) = funded_treasury();
+    let cash = l.get_vault(vid).unwrap().vault.cash.0;
+    let (pool, holders) = (l.token(&id).buyback_pool.0, l.token(&id).pending_holders.0);
+    at("relayer.near", T0 + 200_000, 0);
+    l.treasury_action(vid, TreasuryAction::Buyback, U128(ONE_NEAR / 2), Some("Price fell 20% today".into()));
+    l.treasury_action(vid, TreasuryAction::Rewards, U128(ONE_NEAR / 4), None);
+    let t = l.token(&id);
+    assert_eq!(t.buyback_pool.0, pool + ONE_NEAR / 2);
+    assert_eq!(t.pending_holders.0, holders + ONE_NEAR / 4);
+    let v = l.get_vault(vid).unwrap();
+    assert_eq!(v.vault.cash.0, cash - 3 * ONE_NEAR / 4);
+    // Spending is not a trading loss.
+    assert_eq!(v.drawdown_bps, 0);
+    assert_eq!(v.vault.status, VaultStatus::Active);
+    // The buyback pool then buys and burns as usual.
+    at("anyone.near", T0 + 200_001, 0);
+    let burned = l.token(&id).burned.0;
+    let _ = l.buyback(id.clone());
+    assert!(l.token(&id).burned.0 > burned);
+}
+
+#[test]
+#[should_panic(expected = "the dev can take at most 20% of the treasury a day")]
+fn the_dev_takes_at_most_a_fifth_a_day() {
+    let (mut l, _id, vid) = funded_treasury();
+    let cash = l.get_vault(vid).unwrap().vault.cash.0;
+    at("relayer.near", T0 + 200_000, 0);
+    l.treasury_action(vid, TreasuryAction::PayDev, U128(cash / 10), None);
+    l.treasury_action(vid, TreasuryAction::PayDev, U128(cash / 10), None);
+    // A third tenth goes past the fifth.
+    l.treasury_action(vid, TreasuryAction::PayDev, U128(cash / 10), None);
+}
+
+#[test]
+#[should_panic(expected = "agent only")]
+fn only_the_treasurers_agent_spends() {
+    let (mut l, _id, vid) = funded_treasury();
+    at("dev.near", T0 + 200_000, 0);
+    l.treasury_action(vid, TreasuryAction::PayDev, U128(1), None);
+}
+
+#[test]
+#[should_panic(expected = "only a token's own gardener manages its treasury")]
+fn other_gardeners_have_no_treasury() {
+    let mut l = setup();
+    let _id = launch(&mut l, "dev.near", "OAK", false, T0);
+    at("owner.near", T0, 10 * ONE_NEAR);
+    let vid = l.create_house_vault("Oak".into(), "trend".into(), U128(5 * ONE_NEAR));
+    at("relayer.near", T0 + 1, 0);
+    l.treasury_action(vid, TreasuryAction::Rewards, U128(1), None);
+}

@@ -3,12 +3,16 @@ import type { Env } from '../env'
 import { enqueue } from '../lib/jobs'
 import { nearRaw } from '../lib/units'
 import { view } from '../near/rpc'
-import { type AgentState, decide, type MarketToken, remember, STRATEGIES, type VaultSnapshot } from './strategies'
+import { aiTrades, aiTreasury } from './ai'
+import { type AgentState, decide, type Decision, type MarketToken, remember, setMinTrade, STRATEGIES, type VaultSnapshot } from './strategies'
 
 const SLIPPAGE = 0.03
 const HOUSE_NAMES = ['Linden', 'Rowan', 'Hazel', 'Cedar', 'Alder', 'Juniper', 'Maple', 'Elm', 'Spruce', 'Larch', 'Holly', 'Yew', 'Poplar', 'Aspen']
 
-export async function marketSnapshot(env: Env, now = Date.now()): Promise<MarketToken[]> {
+/** A note with the NEAR AI decision it came from, as "... #ai123" (the site links it to the proof). */
+const tagged = (note: string, aiId: number | null) => (aiId ? `${note.slice(0, 130)} #ai${aiId}` : note.slice(0, 140))
+
+export async function marketSnapshot(env: Env, now = Date.now(), only?: string): Promise<MarketToken[]> {
   const hour = now - 3_600_000
   const day = now - 86_400_000
   const r = await env.DB.prepare(
@@ -18,9 +22,9 @@ export async function marketSnapshot(env: Env, now = Date.now()): Promise<Market
       (SELECT price FROM trades WHERE token_id = k.id AND ts <= ?1 ORDER BY ts DESC LIMIT 1) AS p1h,
       (SELECT price FROM trades WHERE token_id = k.id AND ts <= ?2 ORDER BY ts DESC LIMIT 1) AS p24h,
       COALESCE((SELECT MAX(price) FROM trades WHERE token_id = k.id AND ts > ?2), k.price) AS high_24h
-     FROM tokens k WHERE k.phase IN ('Curve', 'Pool') AND k.last_trade_ts > ?3 ORDER BY volume_1h DESC LIMIT 200`,
+     FROM tokens k WHERE k.phase IN ('Curve', 'Pool') AND (k.last_trade_ts > ?3 OR k.id = ?4) ${only ? 'AND k.id = ?4' : ''} ORDER BY volume_1h DESC LIMIT 200`,
   )
-    .bind(hour, day, now - 3 * 86_400_000)
+    .bind(hour, day, now - 3 * 86_400_000, only ?? '')
     .all<MarketToken & { p1h: number | null; p24h: number | null }>()
   return r.results.map((t) => ({
     ...t,
@@ -32,6 +36,7 @@ export async function marketSnapshot(env: Env, now = Date.now()): Promise<Market
 /** Strategy gardeners traded by the relayer whose turn has come. */
 export async function runAgents(env: Env): Promise<number> {
   if (env.AGENTS_ENABLED !== 'true') return 0
+  setMinTrade(Number(env.MIN_TRADE_NEAR || 0.5))
   const now = Date.now()
   const vaults = await env.DB.prepare(
     `SELECT v.id, v.kind, v.strategy, v.cash, v.equity, v.budget, v.daily_limit, v.allowed, v.positions, s.last_run, s.state,
@@ -43,22 +48,35 @@ export async function runAgents(env: Env): Promise<number> {
     .bind(Math.floor(now / 86_400_000) * 86_400_000, env.RELAYER, now)
     .all<{ id: number; kind: string; strategy: string; cash: number; equity: number; budget: number; daily_limit: number; allowed: string; positions: string; last_run: number | null; state: string | null; spent_today: number }>()
   const due = vaults.results.filter((v) => {
-    const s = STRATEGIES[v.kind === 'Dev' ? 'dev' : v.strategy]
+    // A token's own gardener is its treasurer.
+    const s = STRATEGIES[v.kind === 'Dev' ? 'treasurer' : v.strategy]
     return s && now - (v.last_run ?? 0) >= s.every_ms
   })
   if (!due.length) return 0
   const market = await marketSnapshot(env, now)
   let queued = 0
   for (const row of due) {
-    const strategy = row.kind === 'Dev' ? 'dev' : row.strategy
+    const strategy = row.kind === 'Dev' ? 'treasurer' : row.strategy
     const v: VaultSnapshot = { ...row, strategy, allowed: JSON.parse(row.allowed), positions: JSON.parse(row.positions || '[]') }
     const st: AgentState = row.state ? JSON.parse(row.state) : { entries: {} }
-    const decisions = decide(strategy, v, market, st, now).slice(0, 3)
-    for (const d of decisions) {
-      const args = await tradeArgs(env, v, d.token_id, d.buy, d.near, d.fraction)
-      if (!args) continue
-      const id = await enqueue(env, 'relayer', 'vault_trade', { vault_id: v.id, ...args, note: d.note.slice(0, 140) }, { dedupe: `agent:${v.id}:${Math.floor(now / 60_000)}:${d.token_id}:${d.buy ? 'b' : 's'}` })
-      if (id) queued++
+    let decisions: Decision[] = []
+    if (strategy === 'treasurer') {
+      const tokenId = (v.allowed as { Only?: string })?.Only
+      const token = market.find((t) => t.id === tokenId) ?? (tokenId ? (await marketSnapshot(env, now, tokenId))[0] : undefined)
+      const { actions, aiId } = await aiTreasury(env, v, token)
+      for (const a of actions) {
+        const id = await enqueue(env, 'relayer', 'treasury_action', { vault_id: v.id, action: a.action, amount: nearRaw(a.near), note: tagged(a.note, aiId) }, { dedupe: `treasury:${v.id}:${Math.floor(now / 60_000)}:${a.action}` })
+        if (id) queued++
+      }
+    } else {
+      const ai = strategy === 'ai' ? await aiTrades(env, v, market, st, now) : { decisions: decide(strategy, v, market, st, now), aiId: null }
+      decisions = ai.decisions.slice(0, 3)
+      for (const d of decisions) {
+        const args = await tradeArgs(env, v, d.token_id, d.buy, d.near, d.fraction)
+        if (!args) continue
+        const id = await enqueue(env, 'relayer', 'vault_trade', { vault_id: v.id, ...args, note: tagged(d.note, ai.aiId) }, { dedupe: `agent:${v.id}:${Math.floor(now / 60_000)}:${d.token_id}:${d.buy ? 'b' : 's'}` })
+        if (id) queued++
+      }
     }
     const next = remember(st, decisions, market, now)
     await env.DB.prepare('INSERT INTO agent_state (vault_id, last_run, state) VALUES (?, ?, ?) ON CONFLICT (vault_id) DO UPDATE SET last_run = excluded.last_run, state = excluded.state').bind(v.id, now, JSON.stringify(next)).run()
