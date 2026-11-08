@@ -154,8 +154,8 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 .t-card { display: flex; gap: 14px; padding: 12px; background: var(--surface); border-radius: 22px; box-shadow: var(--shadow); min-width: 0; transition: transform .22s var(--ease), box-shadow .22s; }
 .t-card:hover { transform: translateY(-3px); box-shadow: 0 18px 38px -18px rgb(10 30 10 / .35); }
 .t-card:hover .cover svg, .t-card:hover .cover img { transform: scale(1.06); } .t-card .cover svg, .t-card .cover img { transition: transform .35s var(--ease); }
-.t-card-body { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 3px; font-variant-numeric: tabular-nums; } .t-card-body b { font-weight: 650; font-size: 16.5px; }
-.t-card-foot { margin-top: 6px; }
+.t-card-body { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 6px; font-variant-numeric: tabular-nums; } .t-card-body b { font-weight: 650; font-size: 16.5px; }
+.t-card-foot { margin-top: 4px; }
 .big-num { font-weight: 500; font-size: 21px; line-height: 1.1; letter-spacing: -.03em; font-variant-numeric: tabular-nums; } .big-num.xl { font-size: clamp(30px, 3.6vw, 42px); letter-spacing: -.04em; }
 .bar { display: block; height: 6px; margin-top: 7px; border-radius: 9px; background: var(--sunken); overflow: hidden; } .bar.big { height: 10px; margin: 12px 0; } .bar i { display: block; height: 100%; background: var(--lime); border-radius: 9px; transform-origin: left; transition: transform .6s var(--ease); }
 .danger-bar i { background: var(--neg); }
@@ -189,7 +189,7 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 .copy-mark { position: relative; display: block; flex: none; color: var(--mid); transition: color .15s; } .copy-mark svg { position: absolute; inset: 0; display: block; }
 .copy-mark svg:first-child { transition: opacity .16s, transform .22s var(--ease); } .copy-mark.on svg:first-child { opacity: 0; transform: scale(.55) rotate(-16deg); }
 .copy-tick path { stroke: var(--pos); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset .12s; } .copy-mark.on .copy-tick path { stroke-dashoffset: 0; transition: stroke-dashoffset .3s .07s var(--ease); }
-.t-card-mid { min-height: 30px; }
+.t-card-mid { min-height: 0; align-items: center; }
 @media (min-width: 621px) { .t-row .t-title { flex: 0 0 158px; width: 158px; } } .t-title b { display: block; font-weight: 650; font-size: 17.5px; letter-spacing: -.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .t-title small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mid); font-weight: 450; font-size: 13.5px; }
 .spark { display: block; } .t-row .spark { margin-left: auto; }
 .stage-cell { font-size: 13.5px; color: var(--mid); text-align: right; } .stage-cell .bar { height: 4px; margin-top: 4px; }
@@ -440,7 +440,9 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 .treasury-cash { padding: 12px 14px; margin-top: 10px; background: var(--sunken); border-radius: 14px; }
 
 /* Pictures on the gardener cards of the home page */
-.way-art { width: 100%; height: auto; max-height: 84px; margin-bottom: 6px; }
+.way-art { display: flex; align-items: center; justify-content: center; gap: 10px; height: 84px; margin-bottom: 8px; }
+.way-art svg { flex: none; }
+.way-g { flex: none; overflow: hidden; display: block; } .way-g.dim { opacity: .55; }
 .how-way { gap: 2px; }
 
 /* Planting: the sprout comes out of the soil when a token is created */
@@ -479,3 +481,11 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 
 /* Token cards: the full name sits under the ticker */
 .t-card-name { min-width: 0; font-size: 14.5px; font-weight: 550; color: var(--mid); }
+
+/* Home: the invite button and the NEAR labels */
+.how-invite { justify-self: start; display: inline-flex; align-items: center; gap: 12px; height: auto; padding: 12px 18px 12px 14px; border-radius: 16px; text-align: left; }
+.how-invite span { display: grid; gap: 1px; } .how-invite b { font-weight: 650; font-size: 15px; } .how-invite small { font-size: 13px; color: var(--mid); font-weight: 450; }
+.how-invite svg { color: var(--lime); flex: none; }
+.near-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.near-chip { --near-chip-bg: var(--sunken); display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px 5px 6px; border-radius: 99px; background: var(--near-chip-bg); font-size: 13px; font-weight: 550; color: var(--ink); }
+.near-chip svg { color: var(--ink); }

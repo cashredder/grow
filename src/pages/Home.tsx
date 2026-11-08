@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import Tree from '../components/Tree'
 import { AgentArt, CopyArt, CreateArt } from '../components/WayArt'
-import { Num, TokenCard, fmtUsd } from '../components/ui'
+import { ICONS, Icon, Num, TokenCard, fmtUsd } from '../components/ui'
 import { capUsd, growth, holderCount, progress } from '../lib/engine'
 import { FIRE_DRAWDOWN, STRATEGIES, WARN_DRAWDOWN, useS } from '../lib/store'
 
@@ -18,6 +18,11 @@ const WAYS = [
   { title: 'Create your own', to: '/gardeners?tab=create', text: `${STRATEGIES.length} strategies, your limits.`, Art: CreateArt },
   { title: 'Bring your agent', to: '/gardeners?tab=api', text: 'Plug in your bot with an API key.', Art: AgentArt },
 ]
+
+/** A small N mark for "built on NEAR" labels. */
+const NearMark = () => (
+  <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect width="24" height="24" rx="7" fill="currentColor" /><path d="M7 17V7l10 10V7" stroke="var(--near-chip-bg)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" fill="none" /></svg>
+)
 
 function HowItWorks() {
   return (
@@ -36,20 +41,25 @@ function HowItWorks() {
       <div className="how-lower">
         <div className="card how-hold">
           <h3>Hold and earn</h3>
-          <p>Each token's trading fees pay its holders in NEAR. The longer you hold, the bigger your share. No volume means no rewards.</p>
+          <p>Every trade pays part of its fee to the token's holders, in NEAR, straight from the token's NEAR contract. The longer you hold, the bigger your share.</p>
           <div className="how-tiers">
             {TIERS.map((t) => <div key={t.days} className="how-tier"><span>{t.days} days</span><span className="how-tier-bar"><i style={{ width: `${t.width}%` }} /></span><b>{t.weight}</b></div>)}
           </div>
           <p className="how-note">Selling or sending coins resets their hold time.</p>
-          <Link to="/invite" className="how-link">Invite friends and earn from their trades for 90 days</Link>
+          <Link to="/invite" className="btn ghost how-invite"><Icon d={ICONS.gift} size={18} /><span><b>Invite friends</b><small>Earn NEAR from their trades for 90 days</small></span></Link>
         </div>
         <div className="card how-agents">
           <div className="how-agents-head">
             <div>
               <h3>Gardeners</h3>
-              <p>AI agents that trade in the open. Every trade is public.</p>
+              <p>AI agents that trade in the open. A NEAR AI model makes each decision inside a TEE, and the money never leaves the NEAR contract.</p>
             </div>
             <Link to="/gardeners" className="btn primary small">See gardeners</Link>
+          </div>
+          <div className="near-chips" aria-label="Built on NEAR">
+            <span className="near-chip"><NearMark />NEAR AI Cloud</span>
+            <span className="near-chip"><NearMark />Limits in the NEAR contract</span>
+            <span className="near-chip"><NearMark />Every trade on chain</span>
           </div>
           <div className="how-ways">
             {WAYS.map((w) => <Link to={w.to} className="how-way" key={w.title}><w.Art /><b>{w.title}</b><span>{w.text}</span></Link>)}
@@ -59,7 +69,6 @@ function HowItWorks() {
             <div className="how-meter" aria-hidden="true"><i style={{ left: `${(WARN_DRAWDOWN / FIRE_DRAWDOWN) * 100}%` }} /></div>
             <div className="how-meter-labels" aria-hidden="true"><span>Peak</span><span style={{ left: `${(WARN_DRAWDOWN / FIRE_DRAWDOWN) * 100}%` }}>-{WARN_DRAWDOWN}% warning</span><span>-{FIRE_DRAWDOWN}% fired</span></div>
           </div>
-          <p className="how-note">Copying can lose your budget. Past results don't promise future ones.</p>
         </div>
       </div>
     </section>

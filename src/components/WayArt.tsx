@@ -1,74 +1,55 @@
-// Small pictures for the three ways to use gardeners on the home page. Drawn with the site's own colours
-// (lime leaves, soil, the muted ink), so they follow the light and dark themes.
+// Pictures for the three ways to use gardeners on the home page. The gardeners are the same characters the
+// site uses for them everywhere (Art), with a small drawing of what you do with each.
+import { Art } from './Art'
 
-const Leaf = ({ x, y, r, flip = false, s = 1 }: { x: number; y: number; r: number; flip?: boolean; s?: number }) => (
-  <path
-    d="M0 0 C 6 -10, 20 -12, 26 -2 C 18 6, 6 6, 0 0 Z"
-    transform={`translate(${x} ${y}) rotate(${r}) scale(${flip ? -s : s} ${s})`}
-    fill="var(--lime)"
-  />
+const G = ({ art, size, dim = false }: { art: string; size: number; dim?: boolean }) => (
+  <span className={`cover way-g ${dim ? 'dim' : ''}`} style={{ width: size, height: size, borderRadius: size * 0.28 }}><Art art={art} label="" hue={100} /></span>
 )
 
-function Sprout({ x, base, h = 34, s = 1 }: { x: number; base: number; h?: number; s?: number }) {
-  return (
-    <g>
-      <path d={`M${x} ${base} C ${x - 2} ${base - h * 0.4}, ${x + 2} ${base - h * 0.7}, ${x} ${base - h}`} stroke="var(--lime)" strokeWidth={3 * s} strokeLinecap="round" fill="none" />
-      <Leaf x={x} y={base - h} r={-20} s={s} />
-      <Leaf x={x} y={base - h} r={20} flip s={s} />
-    </g>
-  )
-}
-
-const Soil = ({ x, w, y }: { x: number; w: number; y: number }) => <ellipse cx={x} cy={y} rx={w} ry={7} fill="var(--soil, #8a6a45)" opacity={0.85} />
-
-/** Copy one: a gardener's sprout and the same sprout at your size, linked by an arrow. */
+/** Copy one: a gardener and your copy of it, smaller, following its moves. */
 export function CopyArt() {
   return (
-    <svg viewBox="0 0 160 84" className="way-art" aria-hidden="true">
-      <Soil x={44} w={30} y={70} />
-      <Sprout x={44} base={68} h={40} />
-      <Soil x={118} w={22} y={70} />
-      <Sprout x={118} base={68} h={28} s={0.75} />
-      <path d="M72 40 H 96" stroke="var(--mid)" strokeWidth={2.5} strokeLinecap="round" strokeDasharray="1 6" />
-      <path d="M92 34 L 100 40 L 92 46" stroke="var(--mid)" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-    </svg>
+    <span className="way-art" aria-hidden="true">
+      <G art="oak" size={64} />
+      <svg viewBox="0 0 44 20" width="44" height="20"><path d="M2 10 H 34" stroke="var(--mid)" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="1 6" /><path d="M30 4 L 38 10 L 30 16" stroke="var(--mid)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" /></svg>
+      <G art="oak" size={46} dim />
+    </span>
   )
 }
 
-/** Create your own: a sprout with a strategy dial and two limit sliders. */
+/** Create your own: a gardener and the limits you set for it. */
 export function CreateArt() {
   return (
-    <svg viewBox="0 0 160 84" className="way-art" aria-hidden="true">
-      <Soil x={46} w={28} y={70} />
-      <Sprout x={46} base={68} h={38} />
-      <g transform="translate(92 14)">
-        <rect x={0} y={4} width={58} height={6} rx={3} fill="var(--line)" />
-        <rect x={0} y={4} width={36} height={6} rx={3} fill="var(--lime)" />
-        <circle cx={36} cy={7} r={6} fill="var(--surface)" stroke="var(--lime)" strokeWidth={2.5} />
-        <rect x={0} y={26} width={58} height={6} rx={3} fill="var(--line)" />
-        <rect x={0} y={26} width={18} height={6} rx={3} fill="var(--lime)" />
-        <circle cx={18} cy={29} r={6} fill="var(--surface)" stroke="var(--lime)" strokeWidth={2.5} />
-        <rect x={0} y={48} width={58} height={6} rx={3} fill="var(--line)" />
-        <rect x={0} y={48} width={46} height={6} rx={3} fill="var(--lime)" />
-        <circle cx={46} cy={51} r={6} fill="var(--surface)" stroke="var(--lime)" strokeWidth={2.5} />
-      </g>
-    </svg>
+    <span className="way-art" aria-hidden="true">
+      <G art="acorn" size={64} />
+      <svg viewBox="0 0 64 60" width="64" height="60">
+        {[[8, 40], [26, 18], [44, 50]].map(([y, v], i) => (
+          <g key={i}>
+            <rect x="0" y={y} width="64" height="6" rx="3" fill="var(--line)" />
+            <rect x="0" y={y} width={v} height="6" rx="3" fill="var(--lime)" />
+            <circle cx={v} cy={y + 3} r="6" fill="var(--surface)" stroke="var(--lime)" strokeWidth="2.5" />
+          </g>
+        ))}
+      </svg>
+    </span>
   )
 }
 
-/** Bring your agent: a sprout with a plug: your own bot connects with an API key. */
+/** Bring your agent: your own bot, plugged in with an API key, gardening for you. */
 export function AgentArt() {
   return (
-    <svg viewBox="0 0 160 84" className="way-art" aria-hidden="true">
-      <Soil x={50} w={28} y={70} />
-      <Sprout x={50} base={68} h={38} />
-      <path d="M78 48 C 92 48, 92 30, 106 30" stroke="var(--mid)" strokeWidth={2.5} fill="none" strokeLinecap="round" />
-      <rect x={104} y={20} width={34} height={22} rx={6} fill="var(--surface)" stroke="var(--mid)" strokeWidth={2.5} />
-      <circle cx={114} cy={31} r={2.6} fill="var(--lime)" />
-      <circle cx={128} cy={31} r={2.6} fill="var(--lime)" />
-      <path d="M121 20 V 12" stroke="var(--mid)" strokeWidth={2.5} strokeLinecap="round" />
-      <circle cx={121} cy={10} r={3} fill="var(--lime)" />
-      <path d="M112 46 H 130" stroke="var(--mid)" strokeWidth={2.5} strokeLinecap="round" />
-    </svg>
+    <span className="way-art" aria-hidden="true">
+      <svg viewBox="0 0 120 64" width="120" height="64">
+        <rect x="6" y="14" width="52" height="40" rx="12" fill="var(--surface)" stroke="var(--mid)" strokeWidth="2.5" />
+        <circle cx="22" cy="34" r="4" fill="var(--lime)" />
+        <circle cx="42" cy="34" r="4" fill="var(--lime)" />
+        <path d="M24 44 Q 32 49 40 44" stroke="var(--mid)" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+        <path d="M32 14 V 6" stroke="var(--mid)" strokeWidth="2.5" strokeLinecap="round" />
+        <circle cx="32" cy="5" r="3.5" fill="var(--lime)" />
+        <path d="M58 34 C 72 34, 72 22, 84 22" stroke="var(--mid)" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+        <circle cx="94" cy="22" r="10" fill="none" stroke="var(--lime)" strokeWidth="3" />
+        <path d="M104 22 H 116 M 112 22 V 28 M 116 22 V 27" stroke="var(--lime)" strokeWidth="3" strokeLinecap="round" />
+      </svg>
+    </span>
   )
 }

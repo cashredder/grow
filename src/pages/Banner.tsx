@@ -10,74 +10,70 @@ async function render(c: HTMLCanvasElement) {
   const ctx = c.getContext('2d')!
   ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0)
   await document.fonts.load('500 40px "Instrument Sans Variable"')
+  let seed = 7
+  const rand = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647 }
 
   ctx.fillStyle = '#090b0a'; ctx.fillRect(0, 0, W, H)
 
-  // The same tree at five ages. Sizes grow by one constant ratio, and each tree is measured
-  // by its dense outline (stray leaves ignored), so the gaps between crowns are truly equal.
-  const ground = 472, GAP = 26, RIGHT = 1480
-  const caps = [3000, 15000, 60000, 250000, 1_000_000]
-  const big = 410, ratio = 1.78
-  const art = caps.map((cap) => {
-    const size = 900
-    const off = document.createElement('canvas'); off.width = size; off.height = size
+  // A tree drawn once per growth stage, cropped to its outline, optionally dimmed for distance.
+  const cache = new Map<string, { off: HTMLCanvasElement; x0: number; y0: number; w: number; h: number }>()
+  const tree = (cap: number, twin: boolean) => {
+    const key = cap + ':' + twin
+    if (cache.has(key)) return cache.get(key)!
+    const size = 700, off = document.createElement('canvas'); off.width = size; off.height = size
     const o = off.getContext('2d')!
-    drawTree(o, growth(cap), size, size)
+    drawTree(o, growth(cap), size, size, twin)
     const { data } = o.getImageData(0, 0, size, size)
-    const cols = new Array(size).fill(0), rows = new Array(size).fill(0)
-    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (data[(y * size + x) * 4 + 3] > 24) { cols[x]++; rows[y]++ }
-    const edge = (arr: number[], share: number) => { const lim = Math.max(...arr) * share; const first = arr.findIndex((v) => v >= lim); let last = arr.length - 1; while (last > 0 && arr[last] < lim) last--; return [first, last] }
-    const [x0, x1] = edge(cols, 0.1)
-    const [y0] = edge(rows, 0.1)
-    let y1 = size - 1; while (y1 > 0 && rows[y1] === 0) y1--
-    return { off, x0, y0, w: x1 - x0 + 1, h: y1 - y0 + 1 }
-  })
-  const heights = caps.map((_, i) => big / ratio ** (caps.length - 1 - i))
-  const widths = art.map((a, i) => (a.w * heights[i]) / a.h)
-  let tx = RIGHT - widths.reduce((n, w) => n + w, 0) - GAP * (caps.length - 1)
-  const boxes = art.map((a, i) => {
-    const h = heights[i], w = widths[i], k = h / a.h
-    // draw the whole tree, positioned by its dense outline
-    ctx.drawImage(a.off, tx - a.x0 * k, ground - h - a.y0 * k, a.off.width * k, a.off.height * k)
-    const box = { x: tx, y: ground - h, w, h }
-    tx += w + GAP
-    return box
-  })
-
-  // leaves falling, like the site's animation when a token's cap drops
-  let seed = 41
-  const rand = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647 }
-  const colors = ['#2f6e1e', '#3f8820', '#55a322', '#6dbd21', '#86d41f']
-  for (let placed = 0, tries = 0; placed < 46 && tries < 400; tries++) {
-    const lx = 40 + rand() * (W - 80), ly = 24 + rand() * (H - 70)
-    if (lx < 620 && ly > 110 && ly < 400) continue // keep the slogan clear
-    const sp = boxes[0]
-    if (lx > sp.x - 40 && lx < sp.x + sp.w + 40 && ly > sp.y - 40) continue // and the sprout
-    if (lx < 600 && rand() < 0.55) continue // fewer on the left, most fall near the trees
-    const s = 4.5 + rand() * 6.5, rot = rand() * Math.PI * 2
-    ctx.save(); ctx.translate(lx, ly); ctx.rotate(rot); ctx.scale(1, 0.3 + Math.abs(Math.cos(rot * 1.7)) * 0.7)
-    ctx.globalAlpha = 0.55 + rand() * 0.45
-    ctx.beginPath(); ctx.moveTo(-s, 0); ctx.quadraticCurveTo(0, s * 0.7, s, 0); ctx.quadraticCurveTo(0, -s * 0.7, -s, 0)
-    ctx.fillStyle = colors[Math.floor(rand() * colors.length)]; ctx.fill()
-    ctx.restore()
-    placed++
+    let x0 = size, x1 = 0, y0 = size, y1 = 0
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (data[(y * size + x) * 4 + 3] > 24) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
+    const v = { off, x0, y0, w: x1 - x0 + 1, h: y1 - y0 + 1 }
+    cache.set(key, v)
+    return v
   }
-  ctx.globalAlpha = 1
+  const plant = (cap: number, x: number, ground: number, height: number, dim: number, flip: boolean, twin = false) => {
+    const a = tree(cap, twin), w = (a.w * height) / a.h
+    ctx.save()
+    ctx.translate(x, 0); if (flip) ctx.scale(-1, 1)
+    ctx.filter = dim ? `brightness(${1 - dim}) saturate(${1 - dim * 0.5})` : 'none'
+    ctx.drawImage(a.off, a.x0, a.y0, a.w, a.h, -w / 2, ground - height, w, height)
+    ctx.restore()
+  }
 
-  // slogan: "Let tokens" in the heading style, then "grow." as the wordmark itself
-  const size = 104
-  ctx.textAlign = 'left'
-  ctx.fillStyle = '#edf2ec'
+  // 1. one huge line of type across the whole header
+  const size = 150
   ctx.font = `500 ${size}px "Instrument Sans Variable", sans-serif`
-  ;(ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = `${-0.035 * size}px`
-  const x = 70, line1 = 214
-  ctx.fillText('Let tokens', x, line1)
+  ;(ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = `${-0.04 * size}px`
   const svg = await (await fetch('/logo.svg')).text()
   const d = svg.match(/ d="([^"]+)"/)![1]
-  const k = 470 / 2829.56 // wordmark width in px
-  const baseline = 627 // logo units: bottom of r, o, w and the dot
-  const line2 = line1 + 132
-  ctx.save(); ctx.translate(x + 4, line2 - baseline * k); ctx.scale(k, k); ctx.fillStyle = LIME; ctx.fill(new Path2D(d)); ctx.restore()
+  const words = 'Let tokens '
+  const textW = ctx.measureText(words).width
+  const k = (size * 0.55) / 529 // wordmark x-height (529 units, r top to baseline) matched to the type
+  const logoW = 2829.56 * k
+  const startX = (W - textW - logoW) / 2, baseline = 236
+  ctx.fillStyle = '#edf2ec'; ctx.textAlign = 'left'
+  ctx.fillText(words, startX, baseline)
+  ctx.save(); ctx.translate(startX + textW, baseline - 627 * k); ctx.scale(k, k); ctx.fillStyle = LIME; ctx.fill(new Path2D(d)); ctx.restore()
+
+  // 2. a forest in front of the words: far trees dim and small, near trees full colour
+  const caps = [20000, 45000, 90000, 160000, 300000, 600000, 1_000_000]
+  const pick = () => caps[Math.floor(rand() * caps.length)]
+  for (let i = 0; i < 15; i++) plant(pick(), (i / 14) * (W + 60) - 30 + (rand() - 0.5) * 40, 466, 95 + rand() * 55, 0.72, rand() > 0.5, rand() > 0.8)
+  for (let i = 0; i < 10; i++) plant(pick(), (i / 9) * (W + 40) - 20 + (rand() - 0.5) * 60, 492, 130 + rand() * 70, 0.42, rand() > 0.5, rand() > 0.85)
+  const front: [number, number, number][] = [[0.27, 160000, 200], [0.52, 1_000_000, 262], [0.73, 90000, 180], [0.92, 600000, 235]]
+  for (const [x, cap, h] of front) plant(cap, x * W, 516, h, 0, rand() > 0.5)
+  for (const x of [0.4, 0.63, 0.83]) plant(3000, x * W, 500, 34, 0, false)
+
+  // 3. leaves on the wind
+  const colors = ['#2f6e1e', '#3f8820', '#55a322', '#6dbd21', '#86d41f']
+  for (let i = 0; i < 40; i++) {
+    const lx = rand() * W, ly = 16 + rand() * 260, s = 4 + rand() * 6, rot = rand() * Math.PI * 2
+    if (lx > startX - 20 && lx < startX + textW + logoW + 20 && ly > baseline - 135 && ly < baseline + 50) continue // keep the words clean
+    ctx.save(); ctx.translate(lx, ly); ctx.rotate(rot); ctx.scale(1, 0.3 + Math.abs(Math.cos(rot * 1.7)) * 0.7)
+    ctx.globalAlpha = 0.5 + rand() * 0.5
+    ctx.beginPath(); ctx.moveTo(-s, 0); ctx.quadraticCurveTo(0, s * 0.7, s, 0); ctx.quadraticCurveTo(0, -s * 0.7, -s, 0)
+    ctx.fillStyle = colors[Math.floor(rand() * colors.length)]; ctx.fill(); ctx.restore()
+  }
+  ctx.globalAlpha = 1
 }
 
 export default function Banner() {

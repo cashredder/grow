@@ -1,5 +1,5 @@
-// Share: draws a square card of a token (its tree as it is now in a window, then its picture, ticker, full
-// name, market cap, holders and price change) and offers it to download, copy, share or post.
+// Share: draws a square card of a token (its tree in a square window, then its picture, ticker, full name
+// and its numbers as tiles) and offers it to download, copy, share or post.
 import { useEffect, useState } from 'react'
 import { capUsd, growth, holderCount, type Token } from '../lib/engine'
 import { toast } from '../lib/store'
@@ -60,7 +60,7 @@ function fitText(ctx: CanvasRenderingContext2D, text: string, x: number, y: numb
   ctx.fillText(text, x, y)
 }
 
-/** The square card as a PNG: the tree in its window, then the token and its numbers. */
+/** The square card as a PNG: the tree in its square window, then the token and its numbers. */
 export async function renderShareCard(t: Token): Promise<Blob> {
   const scale = 2
   const c = document.createElement('canvas')
@@ -73,84 +73,112 @@ export async function renderShareCard(t: Token): Promise<Blob> {
   ctx.fillStyle = '#0b100c'
   ctx.fillRect(0, 0, W, H)
 
-  // The window: a night sky over a strip of soil, the tree standing on it.
-  const P = 48, WX = P, WY = P, WW = W - 2 * P, WH = 600
+  // The window: a square of black with green grass, the tree standing in it.
+  const P = 48, S = 560, WX = (W - S) / 2, WY = P
   ctx.save()
-  roundRect(ctx, WX, WY, WW, WH, 36)
+  roundRect(ctx, WX, WY, S, S, 40)
   ctx.clip()
-  const sky = ctx.createLinearGradient(0, WY, 0, WY + WH)
-  sky.addColorStop(0, '#121b13')
-  sky.addColorStop(1, '#1a2a17')
-  ctx.fillStyle = sky
-  ctx.fillRect(WX, WY, WW, WH)
-  const glow = ctx.createRadialGradient(W / 2, WY + WH * 0.55, 10, W / 2, WY + WH * 0.55, WW * 0.55)
-  glow.addColorStop(0, 'rgba(134, 224, 30, 0.24)')
+  ctx.fillStyle = '#000'
+  ctx.fillRect(WX, WY, S, S)
+  const glow = ctx.createRadialGradient(W / 2, WY + S * 0.6, 10, W / 2, WY + S * 0.6, S * 0.6)
+  glow.addColorStop(0, 'rgba(134, 224, 30, 0.16)')
   glow.addColorStop(1, 'rgba(134, 224, 30, 0)')
   ctx.fillStyle = glow
-  ctx.fillRect(WX, WY, WW, WH)
-  const ground = WY + WH - 64
-  ctx.fillStyle = '#3b2a1b'
-  ctx.fillRect(WX, ground, WW, WH)
-  ctx.fillStyle = '#4c3623'
-  ctx.fillRect(WX, ground, WW, 10)
+  ctx.fillRect(WX, WY, S, S)
+  const ground = WY + S - 70
   const size = 1000
   const off = document.createElement('canvas')
   off.width = size
   off.height = size
   const o = off.getContext('2d')!
   drawTree(o, growth(capUsd(t)), size, size, !!t.parents)
-  // Crop to the tree itself and scale it to fill most of the window, standing on the soil.
+  // Crop to the tree itself and scale it to fill most of the window, rooted in the grass.
   const { data } = o.getImageData(0, 0, size, size)
   let x0 = size, x1 = 0, y0 = size, y1 = 0
   for (let y = 0; y < size; y += 2) for (let x = 0; x < size; x += 2) if (data[(y * size + x) * 4 + 3] > 24) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y) }
   if (x1 > x0 && y1 > y0) {
     const w = x1 - x0 + 2, h = y1 - y0 + 2
-    const k = Math.min((WH - 64 - 70) / h, (WW - 120) / w, 6)
-    ctx.drawImage(off, x0, y0, w, h, W / 2 - (w * k) / 2, ground + 6 - h * k, w * k, h * k)
+    const k = Math.min((S - 70 - 60) / h, (S - 90) / w, 6)
+    ctx.drawImage(off, x0, y0, w, h, W / 2 - (w * k) / 2, ground + 14 - h * k, w * k, h * k)
+  }
+  // Grass: a green strip with blades along its top, drawn over the tree's base.
+  const grass = ctx.createLinearGradient(0, ground, 0, WY + S)
+  grass.addColorStop(0, '#5fbf1c')
+  grass.addColorStop(1, '#2d7a0e')
+  ctx.fillStyle = grass
+  ctx.fillRect(WX, ground + 8, S, S)
+  let seed = 7
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647
+  for (let x = WX - 4; x < WX + S + 4; x += 7) {
+    const h = 10 + rnd() * 18, lean = (rnd() - 0.5) * 8
+    ctx.fillStyle = rnd() > 0.5 ? '#6fd11f' : '#55ad18'
+    ctx.beginPath()
+    ctx.moveTo(x - 4, ground + 12)
+    ctx.quadraticCurveTo(x + lean * 0.4, ground + 4 - h * 0.4, x + lean, ground + 10 - h)
+    ctx.quadraticCurveTo(x + lean * 0.6 + 2, ground + 4 - h * 0.3, x + 5, ground + 12)
+    ctx.closePath()
+    ctx.fill()
   }
   ctx.restore()
 
-  // The token: its picture, ticker and full name.
-  const IY = WY + WH + 44
+  // The token: its picture, ticker and full name, centred under the window.
+  const IY = WY + S + 40, CV = 96
+  ctx.font = font(700, 56)
+  const tickerW = Math.min(ctx.measureText(`$${t.ticker}`).width, 560)
+  ctx.font = font(500, 30)
+  const nameW = Math.min(ctx.measureText(t.name).width, 560)
+  const groupW = CV + 24 + Math.max(tickerW, nameW)
+  const GX = (W - groupW) / 2
   const cover = await coverImage(t.image)
   ctx.save()
-  roundRect(ctx, P, IY, 112, 112, 26)
+  roundRect(ctx, GX, IY, CV, CV, 24)
   ctx.clip()
-  if (cover) ctx.drawImage(cover, P, IY, 112, 112)
+  if (cover) ctx.drawImage(cover, GX, IY, CV, CV)
   else {
     ctx.fillStyle = LIME
-    ctx.fillRect(P, IY, 112, 112)
+    ctx.fillRect(GX, IY, CV, CV)
     ctx.fillStyle = '#0b100c'
-    ctx.font = font(700, 42)
+    ctx.font = font(700, 38)
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText(t.ticker.slice(0, 2), P + 56, IY + 58)
+    ctx.fillText(t.ticker.slice(0, 2), GX + CV / 2, IY + CV / 2 + 2)
     ctx.textAlign = 'left'
     ctx.textBaseline = 'alphabetic'
   }
   ctx.restore()
-  const TX = P + 112 + 28, TW = W - P - TX
-  fitText(ctx, `$${t.ticker}`, TX, IY + 56, TW, 700, 60, INK)
-  fitText(ctx, t.name, TX, IY + 100, TW, 500, 32, MID)
+  fitText(ctx, `$${t.ticker}`, GX + CV + 24, IY + 50, 560, 700, 56, INK)
+  fitText(ctx, t.name, GX + CV + 24, IY + 90, 560, 500, 30, MID)
 
-  // The numbers.
+  // The numbers, as tiles like the ones on the home page.
   const change = recentChange(t)
   const stats: [string, string, string][] = [
     ['Market cap', fmtUsd(capUsd(t)), INK],
     ['Holders', String(holderCount(t)), INK],
     ['Change', `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`, change >= 0 ? LIME : '#ff6b5e'],
   ]
-  const SY = IY + 156, col = (W - 2 * P) / stats.length
+  const TY = IY + CV + 36, GAP = 16, TH = 124, TW = (W - 2 * P - GAP * 2) / 3
   stats.forEach(([label, value, color], i) => {
-    const x = P + i * col
-    ctx.fillStyle = FAINT
+    const x = P + i * (TW + GAP)
+    ctx.fillStyle = '#151a16'
+    roundRect(ctx, x, TY, TW, TH, 26)
+    ctx.fill()
+    ctx.textAlign = 'center'
+    ctx.fillStyle = MID
     ctx.font = font(500, 24)
-    ctx.fillText(label, x, SY + 26)
-    fitText(ctx, value, x, SY + 76, col - 24, 700, 46, color)
+    ctx.fillText(label, x + TW / 2, TY + 44)
+    let px = 44
+    ctx.font = font(700, px)
+    while (px > 24 && ctx.measureText(value).width > TW - 32) {
+      px -= 2
+      ctx.font = font(700, px)
+    }
+    ctx.fillStyle = color
+    ctx.fillText(value, x + TW / 2, TY + 96)
+    ctx.textAlign = 'left'
   })
 
   // Footer: the logo and what grow. is.
-  const FY = H - P - 4
+  const FY = H - P + 4
   const logo = await logoImage()
   if (logo) ctx.drawImage(logo, P, FY - 34, 112, 34)
   else {
@@ -161,7 +189,7 @@ export async function renderShareCard(t: Token): Promise<Blob> {
   ctx.fillStyle = FAINT
   ctx.font = font(500, 22)
   ctx.textAlign = 'right'
-  ctx.fillText('Every token is a tree · on NEAR', W - P, FY - 6)
+  ctx.fillText('Every token is a tree', W - P, FY - 7)
   ctx.textAlign = 'left'
 
   return await new Promise((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error('could not draw the card'))), 'image/png'))
@@ -215,7 +243,6 @@ export function ShareButton({ t }: { t: Token }) {
               {canShare && <button className="btn ghost small" onClick={() => navigator.share({ files: [file!], title: `$${t.ticker} on grow.`, text, url: page }).catch(() => {})}>Share…</button>}
               <a className="btn ghost small" href={`https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(page)}`} target="_blank" rel="noreferrer">Post on X</a>
             </div>
-            <small className="muted">On X, attach the downloaded card to your post.</small>
           </div>
         </div>
       )}
