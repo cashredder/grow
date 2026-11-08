@@ -65,7 +65,7 @@ function toHouse(v: ApiVault, prev?: House): House {
   }
 }
 
-const KINDS: Record<string, string> = { buy: 'Buy', sell: 'Sell', buyback: 'Buyback', rewards: 'Holder rewards', pay_dev: 'Dev pay' }
+const KINDS: Record<string, string> = { buy: 'Buy', sell: 'Sell', buyback: 'Buyback', rewards: 'Holder rewards', pay_dev: 'Dev pay', ai_fee: 'AI fee' }
 const DONE: Record<string, string> = { buy: 'Bought', sell: 'Sold', buyback: 'Bought back', rewards: 'Rewarded holders of', pay_dev: 'Paid the dev of' }
 
 /** Gardener log rows. A note ending in "#ai<id>" came from a NEAR AI decision: the tag becomes a link to its proof. */

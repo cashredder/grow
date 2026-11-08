@@ -7,7 +7,7 @@ import { CURVE_END_TOK, POOL_TOK, SUPPLY, V_BASE, V_TOK, holdWeight, price, quot
 
 export const DAY = 86_400_000
 export const STRATEGIES = [
-  { id: 'ai', name: 'AI Trader', risk: 'Medium', blurb: 'A NEAR AI model reads the market and trades within your limits. Every decision is signed inside a TEE.' },
+  { id: 'ai', name: 'AI Trader', risk: 'Medium', blurb: 'A NEAR AI model reads the market and trades within your limits. Every decision is signed inside a TEE and costs 0.001 NEAR from the gardener; an unchanged market is not asked again.' },
   { id: 'steady', name: 'Steady', risk: 'Low', blurb: 'Buys a fixed amount of top tokens on a schedule.' },
   { id: 'trend', name: 'Trend Rider', risk: 'High', blurb: 'Buys tokens gaining volume and unique traders.' },
   { id: 'dip', name: 'Dip Buyer', risk: 'Medium', blurb: 'Buys sharp drops on tokens with strong holders.' },
@@ -16,7 +16,7 @@ export const STRATEGIES = [
 ] as const
 
 /** A token's own gardener: not offered for hire, chosen at launch. */
-export const TREASURER = { id: 'treasurer', name: 'AI Treasurer', risk: 'Low', blurb: "A NEAR AI model runs the token's treasury: buybacks, holder rewards and the dev's pay, within limits the contract enforces." } as const
+export const TREASURER = { id: 'treasurer', name: 'AI Treasurer', risk: 'Low', blurb: "A NEAR AI model runs the token's treasury: buybacks, holder rewards and the dev's pay, within limits the contract enforces. Each decision costs 0.001 NEAR from the treasury, never from holder rewards." } as const
 export const strategyOf = (id: string) => (id === 'treasurer' || id === 'dev' ? TREASURER : STRATEGIES.find((s) => s.id === id))
 
 export const FIRE_DRAWDOWN = 30
