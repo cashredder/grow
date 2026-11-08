@@ -106,24 +106,18 @@ function build(twin: boolean, seed?: number): Model {
     limbs.push({ pts, birth: 0.42 + r() * 0.1, dur: 0.38, depth: 0, root: true })
   }
   if (twin) {
-    // A crossed token: one tree on two trunks. They stand apart at the ground, lean in, meet, and carry one
-    // shared crown, like two saplings grown together.
-    for (const d of [-1, 1, -1, 1]) addRoot(d, 110 + r() * 110, 24, d * 40)
-    const JOIN = 135
-    for (const d of [-1, 1]) {
-      const pts: number[] = []
-      const steps = 12
-      for (let i = 0; i <= steps; i++) {
-        const t = i / steps
-        // From x = ±40 at the ground to ±14 at the join, along a gentle S so they look grown together.
-        const x = d * (40 * (1 - t) ** 1.4 + 14 * t + 5 * Math.sin(t * Math.PI) * (1 - t))
-        const y = -JOIN * t
-        const rad = (35 + (29 - 35) * t) * (1 + 0.6 * Math.exp(-t * 11))
-        pts.push(x, y, rad)
-      }
-      limbs.push({ pts, birth: 0, dur: 0.12, depth: 0 })
+    // A crossed token: one tree whose trunk forks low into two trunks that rise side by side, slightly apart,
+    // under one shared crown (a twin-stem tree).
+    for (const [d, w] of [[-1, 1], [1, 1], [-1, 0.6], [1, 0.6], [1, 0.4]]) addRoot(d, (150 + r() * 80) * w, 28 * (0.5 + w * 0.5), d * 22 * w)
+    const FORK = 62
+    const pts: number[] = []
+    for (let i = 0; i <= 6; i++) {
+      const t = i / 6
+      pts.push(0, -FORK * t, (62 + (54 - 62) * t) * (1 + 0.7 * Math.exp(-t * 9)))
     }
-    grow(0, -JOIN + 8, 0, 150, 50, 0, 0.1, false)
+    limbs.push({ pts, birth: 0, dur: 0.05, depth: 0 })
+    grow(-13, -FORK + 8, -0.15, 250, 35, 0, 0.04, false)
+    grow(13, -FORK + 8, 0.15, 250, 35, 0, 0.04, false)
   } else {
     for (const [d, w] of [[-1, 1], [1, 1], [-1, 0.6], [1, 0.6], [1, 0.4]]) addRoot(d, (140 + r() * 80) * w, 26 * (0.5 + w * 0.5), d * 20 * w)
     grow(0, 0, 0, 280, 55, 0, 0)
