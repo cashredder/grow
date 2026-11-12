@@ -1,0 +1,10 @@
+node_modules/
+dist/
+target/
+.wrangler/
+.dev.vars
+*.key
+.env
+.env.cloudflare*
+.claude/
+backend/.tools/

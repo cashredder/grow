@@ -1,10 +1,11 @@
-# Contract unit tests need near-sdk's native test VM (C libraries), so they run here on Linux.
+# One workflow for the whole repository: contracts (unit tests, wasm build, sandbox end-to-end tests),
+# the API and the site. Contract unit tests need near-sdk's native test VM (C libraries), so they run on Linux.
 name: ci
 on: [push, pull_request]
 jobs:
   contracts:
     runs-on: ubuntu-latest
-    defaults: { run: { working-directory: contracts } }
+    defaults: { run: { working-directory: backend/contracts } }
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -12,11 +13,11 @@ jobs:
       - run: cargo test
       - run: cargo build --release --target wasm32-unknown-unknown -p grow-token -p grow-launchpad
   e2e:
-    # The real wasm contracts on a local NEAR sandbox node (contracts/e2e).
+    # The real wasm contracts on a local NEAR sandbox node (backend/contracts/e2e).
     runs-on: ubuntu-latest
     needs: contracts
     timeout-minutes: 25
-    defaults: { run: { working-directory: contracts } }
+    defaults: { run: { working-directory: backend/contracts } }
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -28,10 +29,10 @@ jobs:
       - name: Sandbox tests
         run: cargo test --manifest-path e2e/Cargo.toml -- --nocapture --test-threads=1
         env:
-          WASM_DIR: ${{ github.workspace }}/contracts/target/near
+          WASM_DIR: ${{ github.workspace }}/backend/contracts/target/near
   api:
     runs-on: ubuntu-latest
-    defaults: { run: { working-directory: api } }
+    defaults: { run: { working-directory: backend/api } }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -39,3 +40,15 @@ jobs:
       - run: npm ci
       - run: npx tsc --noEmit
       - run: npm test
+  app:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: app } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: npm ci
+      - name: Type check and build (built-in market)
+        run: npm run build
+      - name: Build (live, testnet)
+        run: npx vite build --mode live

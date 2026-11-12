@@ -1,220 +1,102 @@
-# grow. — бекенд
+# grow. backend
 
-Смарт-контракты на NEAR и API на Cloudflare для фронта `grow-app`.
+NEAR contracts (Rust) and the API (Cloudflare Worker). The project overview, how to try it and the hackathon
+notes are in the [root README](../README.md). A longer Russian description is in [README.ru.md](README.ru.md).
 
-> **Статус:** код написан и покрыт тестами, но **не аудирован** и ещё не запускался в сети. Сначала testnet,
-> потом внешний аудит контрактов, и только потом mainnet с настоящими деньгами. Копитрейдинг и садовники
-> с чужими деньгами нужно отдельно показать юристу.
+Deployed on NEAR **testnet**:
 
-## Что где
-
-```
-contracts/            Rust, near-sdk 5.30
-  common/             математика кривой, комиссий и множителей холда (без near-sdk, общая для контрактов)
-  token/              токен <id>.grow.near: NEP-141 + NEP-145 + NEP-148 и награды за холд
-  launchpad/          grow.near: запуск, кривая, пул, комиссии, рефералы, выкуп, скрещивание, садовники
-api/                  Cloudflare Worker (TypeScript), D1, R2, два Durable Object
-  schema.sql          база
-  src/indexer/        чтение событий контрактов из блоков (neardata.xyz) в базу
-  src/routes/         HTTP: открытые данные, вход, профиль, файлы, API для агентов
-  src/agents/         стратегии садовников, копирование, keeper
-  src/clock.ts        «часы» (индексатор, агенты, очередь транзакций) и живая лента (WebSocket)
-```
-
-## Как это работает
-
-**Токен.** Один вызов `create_token` создаёт аккаунт `<тикер>-<номер>.grow.near`, ставит на него код токена
-(глобальный контракт NEAR, поэтому запуск дешёвый), выпускает 1 млрд монет на лаунчпад и, если нужно, делает
-первую покупку дева (не больше 10% выпуска, без комиссии стартового окна). Если что-то не получилось, всё
-возвращается.
-
-**Кривая и пул.** x·y=k на виртуальных резервах: 1200 NEAR и 1,073 млрд монет, как во фронте. На кривой
-продаётся 793 млн монет, это около 3398,6 NEAR. Покупка, которая выкупает остаток, обрезается (лишнее
-возвращается) и в том же вызове открывает пул: весь собранный NEAR и 207 млн отложенных монет. LP-долей нет
-вообще, так что ликвидность заперта навсегда.
-
-**Комиссии.** На кривой дев выбирает 0–5% (по умолчанию 1%), в пуле 0,5%. Первые 60 секунд комиссия
-линейно падает с 50%, и всё сверх нормальной ставки уходит платформе, поэтому дев не может снайпить свой токен
-с других кошельков. Нормальная часть делится так: дев 30%, холдеры 10%, реферал 10% от остатка (6%),
-платформа остальное. При запуске дев может отдать 25, 50 или 100% своей доли холдерам или на выкуп с
-сжиганием. Выкуп запускает кто угодно, не чаще раза в блок, и за раз тратится не больше 0,5% виртуального
-NEAR кривой или 0,2% стартового NEAR пула (это взято из Spark).
-
-**Награды за холд.** Доля холдеров копится в лаунчпаде, раз в минуту keeper отправляет её в контракт токена
-(`push_rewards`), а холдеры забирают NEAR сами (`claim_rewards`). Вес холдера равен балансу × множитель:
-до 3 дней 0, с 3 дней ×1, с 5 дней ×1,5, с 10 дней ×2. Множители растут сами, без транзакций: контракт держит
-точный общий вес через небольшое расписание будущих шагов (не больше ~11 дней вперёд) и рассчитывает каждого
-холдера по отрезкам. Всё считается в сети, сервер ни на что не влияет. Купленные монеты усредняют дату холда,
-продажа и отправка её не меняют.
-
-**Рефералы.** Первый `referrer` при покупке или продаже закрепляется за трейдером на 90 дней, реферал
-получает 6% комиссий его сделок и забирает их через `claim_credits`. На сайте ссылка выглядит как
-`?ref=<код>`, а API превращает код в аккаунт (`GET /ref/{код}`).
-
-**Скрещивание.** Дев токена A предлагает (`propose_cross`), дев B принимает (`accept_cross`). Дальше идёт
-окно выхода (по умолчанию сутки), в которое несогласные могут продать. После окна кто угодно вызывает
-`finalize_cross`. Цены усредняются по времени за всё окно, поэтому пампом в последнюю минуту курс не сдвинуть.
-Новый токен C сразу открывается в пуле со всем NEAR обоих рынков, а цена подбирается так, чтобы выпуск был
-ровно 1 млрд. Холдеры обменивают старые монеты, отправив их на лаунчпад (`{"action":"convert"}`), и время
-холда сохраняется. Позиции садовников конвертируются сами. Несобранные награды обоих девов переходят в C,
-делятся в выбранной пропорции и замораживаются на 30 дней.
-
-**Садовники (волты).** Это деньги, которыми агент торгует в рамках лимитов, проверяемых контрактом:
-- *House* — наши пять. Их увольняют при падении на 30% от пика; keeper сразу открывает замену с той же
-  стратегией на деньги аккаунта house funder.
-- *User* — садовник пользователя. Торгует стратегией нашего релеера, через API-ключ или прямо с аккаунта
-  агента пользователя. Есть бюджет, дневной лимит, стоп-лосс, срок, список разрешённых токенов (все или только
-  в пуле).
-- *Copy* — повторяет сделки лидера в своём размере. Повторить можно только реальную недавнюю (до 2 минут)
-  сделку лидера: покупку на `per_trade` или продажу той же доли позиции. Каждую сделку можно скопировать один
-  раз. Если лидера уволили, копия останавливается.
-- *Dev* — дев-награды токена, если садовника подключили при запуске. Торгует только своим токеном.
-
-Чужие деньги в волте может двигать только агент и только сделками. Закрыть волт и забрать NEAR и монеты может
-только владелец. Уволить волт, который упал ниже лимита, может кто угодно (`check_vault`).
-
-**Что не может владелец платформы.** Он может менять настройки будущих запусков только в жёстких пределах
-(сбор за запуск до 10 NEAR, комиссия до 5%, комиссия пула до 1%, стартовая до 50%, окно до 10 минут), ставить
-запуски на паузу, менять казначейство, релеер и house funder. Двигать NEAR кривых и пулов, кредиты
-пользователей и деньги волтов он не может. Метода обновления кода у лаунчпада нет: новая версия выкатывается
-новым контрактом.
-
-**API.** Индексатор читает события `EVENT_JSON` из успешных квитанций `grow.near` и `*.grow.near` и
-раскладывает их в D1 одним атомарным батчем на шаг. Уже применённые события пропускаются, так что повторное
-чтение блока безопасно. Индексатор крутится в Durable Object каждые 2 секунды, там же агенты (раз в 10 секунд),
-keeper (раз в минуту) и очередь транзакций релеера, по одной за раз, чтобы nonce не пересекались.
-
-Открытые данные (`/v1`, любой origin, кэш 3 с):
-
-| Запрос | Что |
+| What | Where |
 |---|---|
-| `GET /v1/stats` | число токенов, общая капа, холдеры, курс NEAR/USD |
-| `GET /v1/tokens?tab=trending\|top\|new\|close\|pool\|watchlist&q=` | список с ценой, капой, прогрессом, спарклайном и изменением за то же окно |
-| `GET /v1/tokens/{id}` | токен и метки риска как в Spark: доля топ-10, доля и статус дева, снайперы, бандлы |
-| `GET /v1/tokens/{id}/trades`, `/holders`, `/comments` | сделки, держатели, комментарии |
-| `GET /v1/tokens/{id}/candles?tf=1s…1d` | свечи 1s, 5s, 1m, 5m, 15m, 30m, 1h, 4h, 1D; периоды без сделок пропускаются |
-| `GET /v1/tokens/{id}/quote?side=&amount=` | живая котировка из контракта и готовый вызов |
-| `GET /v1/feed`, `/v1/leaderboard?tab=`, `/v1/gardeners`, `/v1/gardeners/{id}`, `/v1/users/{account}` | лента, лидерборд, садовники, публичный профиль |
-| `GET /v1/stream` | WebSocket с живыми сделками и запусками |
+| Launchpad contract | `growpad.testnet` |
+| Tokens | `<ticker>-<n>.growpad.testnet`, deployed by the launchpad |
+| Relayer (signs gardener trades, function-call key only) | `growpad-relayer.testnet` |
+| House funder (grow.'s own gardeners) | `growpad-house.testnet` |
+| API | https://grow-api-testnet.grow-api.workers.dev |
 
-С входом через кошелёк (NEP-413: `GET /auth/nonce` → кошелёк подписывает → `POST /auth/login` → токен
-сессии): профиль, комментарии, избранное, уведомления, портфель с живыми множителями и наградами из контракта,
-инвайт-код, API-ключи, свои садовники. Загрузка картинок и метаданных (`/upload`, `/meta`) хранит файлы в R2
-по их SHA-256, поэтому ссылку на метаданные токена после запуска поменять нельзя.
+## Contracts (`contracts/`)
 
-API для своих агентов (`Authorization: Bearer gk_...`): `GET /v1/agent/vaults`, `GET /v1/agent/market`,
-`POST /v1/agent/trade` и `GET /v1/agent/jobs/{id}`. Ключ торгует только привязанными к нему волтами, сверху
-действует его собственный дневной лимит.
+- `common`: curve and fee maths shared by both contracts and mirrored in the site (`app/src/lib/engine.ts`).
+  Virtual reserves 1,200 NEAR / 1.073B coins; the curve sells 793M coins (≈3,398.6 NEAR) and the last buy moves
+  everything into the pool with the 207M coins set aside. Fees: dev's choice 0–5% on the curve (1% default),
+  0.5% in the pool, 50% falling to normal over the first 60 s. Split: dev 30%, holders 10%, referrer 6%,
+  platform the rest.
+- `token`: NEP-141/145/148 with **on-chain hold rewards**. A holder's weight is balance × multiplier
+  (0 before 3 days, ×1 from 3, ×1.5 from 5, ×2 from 10). Multipliers step up by themselves, without
+  transactions; rewards are settled lazily per holder. `launchpad_sell` lets the launchpad sell for a holder only
+  when that holder signed `quick_sell`.
+- `launchpad`:
+  - **Market**: `create_token`, `buy`, selling via `ft_transfer_call {"action":"sell"}`, `quote_buy`,
+    `quote_sell`, `buyback` (once per block, capped), `push_rewards`, referrals (90 days), pull payouts
+    (`claim_dev`, `claim_credits`).
+  - **Crossings**: `propose_cross`, `accept_cross`, an exit window, `finalize_cross` at a time-weighted rate so
+    the new token's supply is exactly 1B; holders convert with `ft_transfer_call {"action":"convert"}` and keep
+    their hold date.
+  - **Gardeners (vaults)**: House (grow.'s, fired at −30% from peak), User (strategy, API key or own agent; budget,
+    daily limit, stop loss, end date, allowed tokens), Copy (repeats a leader's recent trade, once), Dev (the
+    token's own gardener). `vault_trade`, `copy_trade`, `check_vault` (anyone can fire a vault past its limit),
+    `close_vault` (owner only).
+  - **AI treasurer**: `treasury_action(vault_id, buyback | rewards | pay_dev, amount)`: agent only, within the
+    daily limit, dev pay at most 20% of the treasury a day; spending is not counted as a trading loss.
+  - **AI fees**: `pay_ai(vault_id, decision)`: a fixed fee per AI decision (0.001 NEAR, cap 0.01) into the AI fund,
+    at most once per 5 minutes per vault, never for House gardeners; `claim_ai_fund` (owner) pays NEAR AI credits.
+  - **Trading balance**: `deposit_trade`, `quick_buy`, `quick_sell`, `withdraw_trade` (needs 1 yoctoNEAR, so only
+    the wallet can withdraw).
+  - Events: NEP-297, standard `grow`.
 
-**Быстрая торговля (торговый баланс).** Чтобы не подтверждать в кошельке каждую сделку, держатель один раз
-кладёт NEAR на торговый баланс (`deposit_trade`) и добавляет на свой аккаунт ключ, который может вызывать на
-лаунчпаде только `quick_buy` и `quick_sell` (сайт делает это одним подтверждением и хранит ключ в браузере).
-Такой ключ не может прикладывать NEAR, поэтому вывести деньги им нельзя: `withdraw_trade` требует 1 yoctoNEAR,
-то есть кошелёк. `quick_buy` платит с баланса, монеты приходят в кошелёк держателя, так что награды за холд
-работают как обычно. `quick_sell` просит токен (`launchpad_sell`, только от лаунчпада и только за того, кто
-подписал вызов) перевести монеты на лаунчпад так же, как `ft_transfer_call`, с возвратом при неудаче; выручка
-идёт на баланс. Токены, запущенные до этого (`grow_token_version` нет), продаются только из кошелька. Балансы
-лежат в отдельном префиксе хранилища, поэтому лаунчпад обновляется без миграции.
+Tests: `cargo test` (55 unit tests, Linux: near-sdk's test VM needs C libraries) and `contracts/e2e`
+(near-workspaces sandbox with the real wasm). Build: `cargo near build non-reproducible-wasm --no-abi` in
+`token/` and `launchpad/`.
 
-**ИИ-садовники на NEAR AI Cloud.** Два вида садовников принимают решения моделью NEAR AI Cloud
-(`src/agents/ai.ts`, `src/agents/nearai.ts`), которая работает в TEE и подписывает каждый ответ:
+## Calling the contracts
 
-- *AI Trader* (стратегия `ai`) торгует, как остальные садовники.
-- *AI Treasurer* — собственный садовник токена (подключается при запуске, получает долю комиссий дева). Он
-  тратит казну через `treasury_action` лаунчпада: `buyback` (в пул выкупа, который покупает и сжигает монеты с
-  обычными ограничениями), `rewards` (в награды холдерам) и `pay_dev` (деву, не больше 20% казны в день).
-
-Модель только предлагает: код оставляет разрешённые токены и размеры (покупка не больше 20% садовника, казначей не
-больше четверти казны за раз), а контракт проверяет агента, дневной лимит, стоп-лосс и потолок выплат деву.
-Траты казначея не считаются убытком садовника. Для каждого решения сохраняются точные запрос и ответ, их SHA-256,
-подпись NEAR AI (`/v1/signature/{chat_id}`), проверка подписи (EIP-191, адрес подписанта) и проверка, что этот
-адрес назван в свежем отчёте об аттестации с нашим nonce. Всё это отдаёт `GET /v1/ai/decisions/{id}`, а сайт
-ставит на действия ссылку «NEAR AI». Кварту Intel TDX сам API не проверяет (это делает `dcap-qvl`, см.
-docs.near.ai/cloud/verification). Без ключа `NEARAI_KEY` или при ошибке модели садовники решают по правилам.
-
-**Плата за ИИ.** Садовник, который решает через NEAR AI, платит за каждое отвеченное решение фиксированную
-сумму (`ai_fee`, по умолчанию 0,001 NEAR, потолок 0,01) в фонд ИИ лаунчпада (`pay_ai`, не чаще раза в 5 минут на
-садовника, только агентом). Владелец забирает фонд в казну (`claim_ai_fund`) и покупает на него кредиты NEAR AI.
-Садовники grow. (House) не платят — их оплачивает доля платформы. Награды холдерам не трогаются никогда. Если модель
-не ответила, плата не берётся, а неизменный рынок не спрашивается повторно. У казначея плата — такая же трата, как
-его действия, у трейдеров — расход, который виден в их результатах.
-
-Ключ: создать в cloud.near.ai и положить в секреты воркера (`wrangler secret put NEARAI_KEY --env <env>`).
-Модель задаёт `AI_MODEL`, минимальную сделку садовников-по-правилам `MIN_TRADE_NEAR`.
-
-**Что взято из Spark** (`AlexLaevski/spark-launchpad`): виртуальные резервы и атомарный переход в пул,
-стартовая комиссия, которая падает и уходит платформе, «только pull-выплаты», ограничения выкупа, хранение
-картинок и метаданных по хэшу, проверка картинок по сигнатуре файла, нормализация ссылок на соцсети, лимиты
-комментариев по автору и по IP, метки риска, идемпотентный индексатор и «часы» на Durable Object.
-
-## Проверено
-
-Всё это гоняет GitHub CI (`.github/workflows/ci.yml`) на каждый пуш:
-
-- `cargo test`, 55 тестов контрактов: математика кривой и комиссий (7), токен и награды за холд (13),
-  лаунчпад (35) — запуск и откат, стартовая комиссия, торговля, переход в пул, рефералы, выкуп, лимиты и
-  увольнение садовников, копирование, скрещивание с точным выпуском и заморозкой наград, торговый баланс, казначей токена, плата за ИИ.
-- Оба контракта собираются в wasm.
-- `npm test` для API, 19 тестов: подпись транзакций совпадает с near-api-js байт в байт, вход NEP-413,
-  разбор событий, стратегии и сквозной тест на локальной D1 (события на входе, ответы API на выходе, keeper).
-- Проверка типов TypeScript; `wrangler deploy --dry-run` собирает воркер.
-
-На Windows тесты контрактов не собираются (тестовой машине near-sdk нужны C-библиотеки), поэтому их запускает
-CI на Linux. Не проверены работа в testnet, сборка через `cargo near` с деплоем, настоящие кошельки, нагрузка
-и аудит.
-
-## Запуск
-
-### Контракты
-
-Нужны Rust stable, `cargo-near` и `near-cli-rs`.
+With [near-cli-rs](https://github.com/near/near-cli-rs) and a testnet account (`YOU.testnet`):
 
 ```bash
-cd contracts
-cargo test
-cargo near build non-reproducible-wasm --manifest-path token/Cargo.toml
-cargo near build non-reproducible-wasm --manifest-path launchpad/Cargo.toml
+# read
+near contract call-function as-read-only growpad.testnet list_tokens json-args '{}' network-config testnet now
+near contract call-function as-read-only growpad.testnet quote_buy json-args '{"token_id":"leaf-2","amount":"100000000000000000000000"}' network-config testnet now
+
+# buy LEAF for 0.1 NEAR (+0.00125 NEAR registration on a first buy)
+near contract call-function as-transaction growpad.testnet buy json-args '{"token_id":"leaf-2","min_out":"1"}' prepaid-gas '150.0 Tgas' attached-deposit '0.10125 NEAR' sign-as YOU.testnet network-config testnet sign-with-keychain send
+
+# sell 1,000 LEAF (18 decimals)
+near contract call-function as-transaction leaf-2.growpad.testnet ft_transfer_call json-args '{"receiver_id":"growpad.testnet","amount":"1000000000000000000000","msg":"{\"action\":\"sell\",\"min_out\":\"1\"}"}' prepaid-gas '200.0 Tgas' attached-deposit '1 yoctoNEAR' sign-as YOU.testnet network-config testnet sign-with-keychain send
 ```
 
-Дальше для testnet (точный синтаксис сверить с `near --help`, команды near-cli-rs интерактивные):
+## API (`api/`)
 
-1. Создать аккаунты `grow.testnet` (лаунчпад), `relayer.grow.testnet`, `house.grow.testnet` (house funder) и
-   казначейство.
-2. Опубликовать код токена как глобальный контракт по хэшу (`near contract deploy-as-global ... as-global-hash`)
-   и запомнить хэш.
-3. Задеплоить лаунчпад с `new {"owner","treasury","relayer"}`, потом вызвать `set_token_code_hash {"hash"}`
-   и `set_house_funder {"house_funder"}`. Без глобального контракта можно отправить wasm токена в
-   `set_token_code` (как input), но тогда каждый запуск будет стоить на ~2 NEAR дороже из-за хранилища.
-4. Дать релееру ключ только на вызов функций `grow.testnet`: `vault_trade, copy_trade, push_rewards, buyback,
-   finalize_cross, check_vault`. Деньги таким ключом не двигаются.
-5. Открыть пять наших садовников: `create_house_vault` с депозитом и стратегиями `steady, trend, dip, grad, exit`.
+A Cloudflare Worker with D1 and two Durable Objects. The **clock** runs every 2 s: it indexes new contract events
+(per-account reads from FastNEAR's transaction API, applied idempotently in one D1 batch), runs the gardeners every
+~10 s and the keeper every minute (reward pushes, buybacks, crossings, firing), and sends the relayer's queued
+transactions one at a time. The **hub** is the WebSocket live feed.
 
-### API
+Open data (`/v1`, any origin): `stats`, `tokens` (tabs, search), `tokens/{id}` (with risk labels),
+`tokens/{id}/trades|holders|comments|candles|quote`, `feed`, `leaderboard`, `gardeners`, `gardeners/{id}` (with
+AI decisions), `users/{account}`, `ai`, `ai/decisions/{id}` (request, response, signature, how to verify),
+`stream` (WebSocket).
 
-```bash
-cd api
-npm install
-npx wrangler d1 create grow                # вписать database_id в wrangler.toml
-npx wrangler r2 bucket create grow-files
-npm run db:local && npm run dev            # локально на :8788
-npx wrangler secret put RELAYER_KEY        # ed25519:... ключ релеера (function-call)
-npx wrangler secret put HOUSE_FUNDER_KEY   # необязательно: для автозамены уволенных садовников
-npx wrangler secret put ADMIN_TOKEN
-npx wrangler secret put SESSION_SALT
-npm run db:remote && npm run deploy
-```
+Signed-in (NEP-413 `GET /auth/nonce` → wallet signs → `POST /auth/login`): profile, comments, favourites,
+notifications, portfolio, invite code, API keys, own gardeners, picture and metadata upload.
 
-Нужен платный план Workers (5 $ в месяц): индексатор делает больше подзапросов, чем разрешает бесплатный.
-Статус и ошибки видны в `GET /admin/status` с `Authorization: Bearer <ADMIN_TOKEN>`.
+Agents (`Authorization: Bearer gk_…`): `GET /v1/agent/vaults`, `GET /v1/agent/market`, `POST /v1/agent/trade`,
+`GET /v1/agent/jobs/{id}`.
 
-## Что ещё не сделано
+**AI gardeners** (`src/agents/ai.ts`, `src/agents/nearai.ts`): the AI Trader (strategy `ai`) and the AI Treasurer
+(a token's Dev vault) ask a NEAR AI Cloud model (`AI_MODEL`, default `z-ai/glm-5.3-flash`). The model's answer is
+checked against the vault (allowed tokens, at most 20% of the vault per buy, a quarter of the treasury per run) and
+the contract checks the rest. Each decision is stored with its request, response, hashes and NEAR AI's signature;
+the signer is recovered (EIP-191) and must be named in a fresh attestation report bound to our nonce. Without a key
+or when the model fails, rules decide and no fee is charged; an unchanged market is not asked again.
 
-- **Фронт подключён, но транзакции не проверены в сети.** `grow-app` в живом режиме (`VITE_API_URL`)
-  читает всё из API и подписывает действия через NEAR Wallet Selector. Чтение проверено на локальном API с
-  тестовыми данными (`scripts/seed-local.ts`), а покупки, продажи, запуск и садовники заработают после
-  деплоя контрактов в testnet.
-- **«ИИ» садовников.** Сейчас пять стратегий — это понятные правила на данных рынка (объём, уникальные
-  покупатели, просадки, близость к пулу, ступени фиксации прибыли). Языковую модель можно подключить через
-  тот же путь, что и API-ключи, и это отдельная задача.
-- Монеты внутри волтов лежат на лаунчпаде, поэтому наград за холд не получают.
-- Курс NEAR/USD берётся из CoinGecko; для mainnet лучше поставить свой источник.
+Tests: `npm test` (27). Local run: `npm run dev`; fill a local database with
+`npx vitest run -c vitest.seed.config.ts` (made-up activity, never against a remote database).
+
+### Deploying your own
+
+1. Build both contracts; deploy the launchpad with `new {owner, treasury, relayer}`, upload the token code with
+   `set_token_code` (raw wasm as input), adjust `set_config`, `set_house_funder`.
+2. Give the relayer account a function-call key for the launchpad limited to
+   `vault_trade, copy_trade, push_rewards, buyback, finalize_cross, check_vault, treasury_action, pay_ai`.
+3. `wrangler d1 create`, apply `api/schema.sql`, fill `[env.<name>]` in `api/wrangler.toml`, `wrangler deploy`.
+4. Secrets: `RELAYER_KEY` (that function-call key), `SESSION_SALT`, `ADMIN_TOKEN`, optionally `NEARAI_KEY` and
+   `HOUSE_FUNDER_KEY` (`wrangler secret put <NAME> --env <name>`).
