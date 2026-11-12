@@ -1,0 +1,216 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>grow. intro</title>
+<style>
+html, body { margin: 0; background: #000; } canvas { display: block; width: 100vw; }
+</style></head><body><canvas id="c" width="1920" height="1080"></canvas>
+<script>
+const W = 1920, H = 1080, LIME = '#86E01E'
+const ctx = document.getElementById('c').getContext('2d')
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v))
+const lerp = (a, b, t) => a + (b - a) * t
+const seg = (t, a, b) => clamp((t - a) / (b - a))
+const outCubic = (v) => 1 - (1 - v) ** 3
+const inOut = (v) => (v < .5 ? 4 * v * v * v : 1 - (-2 * v + 2) ** 3 / 2)
+const outBack = (v) => { const c = 1.4; return 1 + (c + 1) * (v - 1) ** 3 + c * (v - 1) ** 2 }
+function rng(seed) { return () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296 } }
+const font = (s, w = 500) => `${w} ${s}px Sans, sans-serif`
+function label(x, y, text, color = '#222', size = 15, weight = 500, align = 'left') { ctx.fillStyle = color; ctx.font = font(size, weight); ctx.textAlign = align; ctx.textBaseline = 'alphabetic'; ctx.fillText(text, x, y) }
+function bg(c) { ctx.fillStyle = c; ctx.fillRect(0, 0, W, H) }
+function textBlock(x, y, seed, rows, color, t) { // the tiny data columns from technical plates
+  const r = rng(seed)
+  ctx.fillStyle = color
+  for (let i = 0; i < rows; i++) { const n = 40 + r() * 150; if (seg(t, 0, .5) * rows > i) ctx.fillRect(x, y + i * 9, n, 3) }
+}
+function vignette(a = .25) { const g = ctx.createRadialGradient(W / 2, H / 2, H * .35, W / 2, H / 2, H * .95); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, `rgba(0,0,0,${a})`); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H) }
+function push(p, cx = W / 2, cy = H / 2, amt = .05) { const s = 1 + amt * p; ctx.translate(cx, cy); ctx.scale(s, s); ctx.translate(-cx, -cy) }
+
+// Branching structure, revealed by age. Pure function of its seed.
+function branches(seed, x, y, angle, len, depth, spread = .5, wobble = .35) {
+  const r = rng(seed), out = []
+  const go = (x, y, a, l, d, born, w) => {
+    const n = 7, pts = [[x, y]]
+    let ang = a
+    for (let i = 0; i < n; i++) { ang += (r() - .5) * wobble; x += Math.sin(ang) * l / n; y -= Math.cos(ang) * l / n; pts.push([x, y]) }
+    const dur = .12
+    out.push({ pts, born, dur, w, d })
+    if (d <= 0) return
+    const kids = r() > .35 ? 2 : 3
+    for (let k = 0; k < kids; k++) {
+      const place = .55 + r() * .45, i = Math.round(place * n)
+      go(pts[i][0], pts[i][1], ang + (k % 2 ? 1 : -1) * (spread * (.4 + r())), l * (.62 + r() * .2), d - 1, born + dur * place, w * .68)
+    }
+  }
+  go(x, y, angle, len, depth, 0, depth * 1.4)
+  return out
+}
+function drawBranches(list, age, color) {
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = color
+  for (const b of list) {
+    const f = seg(age, b.born, b.born + b.dur)
+    if (f <= 0) continue
+    const m = f * (b.pts.length - 1), last = Math.floor(m)
+    ctx.beginPath(); ctx.moveTo(b.pts[0][0], b.pts[0][1])
+    for (let i = 1; i <= last; i++) ctx.lineTo(b.pts[i][0], b.pts[i][1])
+    if (last < b.pts.length - 1) { const k = m - last, A = b.pts[last], B = b.pts[last + 1]; ctx.lineTo(lerp(A[0], B[0], k), lerp(A[1], B[1], k)) }
+    ctx.lineWidth = Math.max(.7, b.w); ctx.stroke()
+  }
+}
+const cache = {}
+const once = (k, f) => cache[k] ??= f()
+
+function leafShape(len, side, fill, rib) {
+  ctx.beginPath(); ctx.moveTo(0, 0)
+  ctx.bezierCurveTo(side * len * .36, -len * .26, side * len * .32, -len * .84, 0, -len)
+  ctx.bezierCurveTo(-side * len * .3, -len * .84, -side * len * .3, -len * .28, 0, 0)
+  ctx.fillStyle = fill; ctx.fill()
+  if (rib) { ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -len * .9); ctx.strokeStyle = rib; ctx.lineWidth = Math.max(1, len * .022); ctx.stroke() }
+}
+
+// ---------- scenes: each receives p, its own 0..1 progress ----------
+const scenes = [
+  { d: 1.5, f(p) { // a seed germinates, seen in cross section
+    bg('#eef2f4'); ctx.save(); push(p, W / 2, 620, .1)
+    const soilY = 560
+    const g = ctx.createLinearGradient(0, soilY, 0, H); g.addColorStop(0, '#6f5a43'); g.addColorStop(1, '#2d2319'); ctx.fillStyle = g; ctx.fillRect(0, soilY, W, H)
+    const r = rng(4); ctx.fillStyle = 'rgba(0,0,0,.2)'; for (let i = 0; i < 700; i++) ctx.fillRect(r() * W, soilY + r() * 520, 1 + r() * 7, 1 + r() * 4)
+    const roots = once('r1', () => branches(11, 960, 700, Math.PI, 300, 4, .7, .5))
+    drawBranches(roots, outCubic(p) * .95, '#f1e6cf')
+    const stem = outCubic(seg(p, .08, .85)) * 360
+    ctx.strokeStyle = '#7cc242'; ctx.lineWidth = 12; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(960, 690); ctx.quadraticCurveTo(960 + 18, 690 - stem * .5, 960, 690 - stem); ctx.stroke()
+    ctx.save(); ctx.translate(960, 690 - stem); const k = outBack(seg(p, .42, .95))
+    for (const s of [-1, 1]) { ctx.save(); ctx.rotate(s * .95); leafShape(150 * k, s, '#86d41f', 'rgba(30,70,10,.5)'); ctx.restore() }
+    ctx.restore()
+    ctx.fillStyle = '#7a4d27'; ctx.beginPath(); ctx.ellipse(960, 705, 58, 38, -.25, 0, 7); ctx.fill()
+    ctx.fillStyle = '#a06b38'; ctx.beginPath(); ctx.ellipse(948, 695, 34, 16, -.3, 0, 7); ctx.fill()
+    ctx.restore()
+    textBlock(60, 60, 2, 8, '#8fa0a8', p); label(60, 1036, 'FIG. 01  GERMINATION', '#f1e6cf')
+  } },
+  { d: 1.2, f(p) { // mycelium racing across the dark
+    bg('#040806'); const list = once('r2', () => { let a = []; for (let i = 0; i < 7; i++) { const ang = i / 7 * 6.28; a = a.concat(branches(30 + i, 960, 540, ang, 280, 5, .55, .5)) } return a })
+    ctx.save(); push(p, W / 2, H / 2, .22); ctx.globalCompositeOperation = 'lighter'; ctx.shadowColor = '#86e01e'; ctx.shadowBlur = 8
+    drawBranches(list, outCubic(p) * .75, 'rgba(160,240,140,.8)'); ctx.restore()
+    ctx.globalCompositeOperation = 'source-over'; label(60, 1036, 'NETWORK  ' + Math.round(outCubic(p) * 4096) + ' TIPS', '#6d8a72')
+  } },
+  { d: 1.2, f(p) { // a bloom opens, drawn like a scientific plate
+    bg('#e4e7e9'); ctx.save(); ctx.translate(960, 540); ctx.rotate(p * .3)
+    const open = outCubic(p)
+    const layers = [[14, 430, 0, '#7b5cd6'], [12, 330, .3, '#3fb8a8'], [10, 220, .1, '#e8a91e']]
+    layers.forEach(([n, len, off, col], li) => {
+      for (let i = 0; i < n; i++) {
+        ctx.save(); ctx.rotate(off + i / n * 6.283); const l = len * outBack(seg(open, li * .1, .75 + li * .1)); ctx.scale(1, 1)
+        ctx.strokeStyle = col; ctx.lineWidth = 1.2; ctx.globalAlpha = .9
+        for (let k = -4; k <= 4; k++) { ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(k * l * .07, -l * .55, k * l * .012, -l); ctx.stroke() }
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.bezierCurveTo(l * .3, -l * .3, l * .22, -l * .85, 0, -l); ctx.bezierCurveTo(-l * .22, -l * .85, -l * .3, -l * .3, 0, 0); ctx.fillStyle = col; ctx.globalAlpha = .13; ctx.fill(); ctx.restore()
+      }
+    })
+    ctx.globalAlpha = 1; const r = rng(9); for (let i = 0; i < 90; i++) { const a = r() * 6.28, d = r() * 90 * open; ctx.fillStyle = '#c74a1f'; ctx.beginPath(); ctx.arc(Math.cos(a) * d, Math.sin(a) * d, 2 + r() * 3, 0, 7); ctx.fill() }
+    ctx.restore(); textBlock(1620, 90, 7, 12, '#9aa3a8', p); label(60, 1036, 'FIG. 02  ANTHESIS', '#3a4248')
+  } },
+  { d: 1.2, f(p) { // a sapling becomes a tree in ink
+    bg('#f6f6f2'); const t = once('r3', () => branches(77, 960, 1010, 0, 330, 7, .42, .28))
+    ctx.save(); push(p, 960, 900, .06); drawBranches(t, inOut(p) * 1.1, '#101410'); ctx.restore(); textBlock(70, 80, 3, 10, '#b5b5ad', p); label(60, 1036, 'FIG. 03  YEARS 1 TO 80', '#30342f')
+  } },
+  { d: 1.7, f(p) { // a rocket assembled on the drawing board
+    bg('#fbfbfa'); ctx.strokeStyle = '#e6e7e8'; ctx.lineWidth = 1; for (let x = 0; x < W; x += 60) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke() } for (let y = 0; y < H; y += 60) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke() }
+    const a = 1 - inOut(seg(p, .1, .78)) // explode amount
+    ctx.save(); ctx.translate(960, 540); ctx.rotate(-.12); ctx.lineWidth = 1.6; ctx.strokeStyle = '#111'; ctx.lineJoin = 'round'
+    const part = (dx, dy, draw) => { ctx.save(); ctx.translate(dx * a, dy * a); draw(); ctx.restore() }
+    part(420, -60, () => { ctx.beginPath(); ctx.moveTo(190, -70); ctx.quadraticCurveTo(350, -62, 430, 0); ctx.quadraticCurveTo(350, 62, 190, 70); ctx.closePath(); ctx.stroke(); for (let i = 1; i < 5; i++) { const x = 190 + i * 45, h = 70 * (1 - (i / 5) ** 2); ctx.beginPath(); ctx.ellipse(x, 0, 7, h, 0, 0, 7); ctx.stroke() } })
+    part(0, 120, () => { ctx.strokeRect(-200, -70, 390, 140); for (let i = 0; i < 16; i++) { const x = -200 + i * 26; ctx.beginPath(); ctx.ellipse(x, 0, 12, 70, 0, 0, 7); ctx.globalAlpha = .55; ctx.stroke(); ctx.globalAlpha = 1 } for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(-200, i * 28); ctx.lineTo(190, i * 28); ctx.globalAlpha = .4; ctx.stroke(); ctx.globalAlpha = 1 } ctx.fillStyle = '#86E01E'; ctx.fillRect(-40, -18, 110, 36); ctx.strokeRect(-40, -18, 110, 36) })
+    part(-360, -110, () => { ctx.beginPath(); ctx.moveTo(-200, -70); ctx.lineTo(-300, -40); ctx.lineTo(-300, 40); ctx.lineTo(-200, 70); ctx.closePath(); ctx.stroke(); for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.ellipse(-345, i * 34, 45, 16, 0, 0, 7); ctx.stroke(); ctx.beginPath(); ctx.moveTo(-300, i * 24); ctx.lineTo(-340, i * 34); ctx.stroke() } })
+    part(-150, -210, () => { ctx.beginPath(); ctx.moveTo(-150, -70); ctx.lineTo(-280, -170); ctx.lineTo(-250, -70); ctx.closePath(); ctx.stroke() })
+    part(-150, 240, () => { ctx.beginPath(); ctx.moveTo(-150, 70); ctx.lineTo(-280, 170); ctx.lineTo(-250, 70); ctx.closePath(); ctx.stroke() })
+    ctx.strokeStyle = '#d93a2b'; ctx.setLineDash([6, 6]); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-620, 0); ctx.lineTo(720, 0); ctx.stroke(); ctx.setLineDash([]); ctx.restore()
+    for (const [x, y, s] of [[300, 180, 'A 01 NOSE'], [1490, 250, 'B 04 TANK'], [260, 860, 'C 02 ENGINES'], [1500, 860, 'D 07 FINS']]) { ctx.strokeStyle = '#d93a2b'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x - 12, y); ctx.lineTo(x + 12, y); ctx.moveTo(x, y - 12); ctx.lineTo(x, y + 12); ctx.stroke(); label(x + 22, y + 5, s, '#111') }
+    label(60, 1036, 'FIG. 04  ASSEMBLY', '#111'); textBlock(1620, 70, 13, 10, '#c4c6c8', p)
+  } },
+  { d: 1.5, f(p) { // lift-off
+    bg('#030407'); const r = rng(5); ctx.fillStyle = '#fff'
+    for (let i = 0; i < 260; i++) { const x = r() * W, y = (r() * H + p * p * 1700 * (.3 + r())) % H, l = 1 + p * p * 60 * r(); ctx.globalAlpha = .3 + r() * .7; ctx.fillRect(x, y, 1.6, l) }
+    ctx.globalAlpha = 1; const y = lerp(760, 300, inOut(p)), shake = (Math.sin(p * 90) + Math.sin(p * 151)) * 2.4
+    ctx.save(); ctx.translate(960 + shake, y); ctx.globalCompositeOperation = 'lighter'
+    const r2 = rng(6); for (let i = 0; i < 560; i++) { const k = (r2() + p * 6) % 1, sp = (r2() - .5) * (40 + k * 240), d = 150 + k * 800, s = 40 * (1 - k) + 8; const g = ctx.createRadialGradient(sp, d, 0, sp, d, s); const hue = k < .25 ? '255,255,235' : k < .6 ? '255,170,60' : '140,70,40'; g.addColorStop(0, `rgba(${hue},${.32 * (1 - k)})`); g.addColorStop(1, `rgba(${hue},0)`); ctx.fillStyle = g; ctx.fillRect(sp - s, d - s, s * 2, s * 2) }
+    ctx.globalCompositeOperation = 'source-over'
+    const body = ctx.createLinearGradient(-48, 0, 48, 0); body.addColorStop(0, '#f6f6f4'); body.addColorStop(.6, '#c7cacb'); body.addColorStop(1, '#55585b'); ctx.fillStyle = body
+    ctx.beginPath(); ctx.moveTo(0, -250); ctx.quadraticCurveTo(52, -150, 48, -60); ctx.lineTo(48, 140); ctx.lineTo(-48, 140); ctx.lineTo(-48, -60); ctx.quadraticCurveTo(-52, -150, 0, -250); ctx.fill()
+    ctx.fillStyle = '#2a2c2e'; ctx.beginPath(); ctx.moveTo(48, 70); ctx.lineTo(96, 165); ctx.lineTo(48, 140); ctx.closePath(); ctx.moveTo(-48, 70); ctx.lineTo(-96, 165); ctx.lineTo(-48, 140); ctx.closePath(); ctx.fill(); ctx.fillStyle = LIME; ctx.fillRect(-48, -40, 96, 12)
+    ctx.restore(); label(60, 1036, 'T+00:0' + Math.floor(p * 9) + '  ASCENT', '#7c8088')
+  } },
+  { d: 1.3, f(p) { // one cell becomes many
+    bg('#07090c'); const cells = 2 ** Math.floor(p * 6.5), f = (p * 6.5) % 1
+    ctx.save(); ctx.translate(960, 540); ctx.globalCompositeOperation = 'lighter'
+    const total = Math.min(90, cells); for (let i = 0; i < total; i++) { const ang = i * 2.39996, d = Math.sqrt(i) * 74 * (.9 + f * .1), R = Math.max(26, 250 / Math.sqrt(total)); const x = Math.cos(ang) * d, y = Math.sin(ang) * d; const g = ctx.createRadialGradient(x - R * .3, y - R * .3, R * .1, x, y, R); g.addColorStop(0, 'rgba(210,255,190,.55)'); g.addColorStop(.75, 'rgba(90,190,110,.18)'); g.addColorStop(1, 'rgba(120,230,150,.5)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R, 0, 7); ctx.fill() }
+    ctx.restore(); ctx.globalCompositeOperation = 'source-over'; label(60, 1036, 'DIVISION  ' + cells + ' CELLS', '#7e9184')
+  } },
+  { d: 1.7, f(p) { // a person grows up
+    bg('#f1efe9'); const ages = [[0, 74, .32], [4, 104, .22], [9, 138, .18], [14, 164, .15], [25, 182, .135]]
+    const q = inOut(p) * (ages.length - 1), i = Math.min(ages.length - 2, Math.floor(q)), k = q - i, A = ages[i], B = ages[i + 1]
+    const cm = lerp(A[1], B[1], k), ratio = lerp(A[2], B[2], k), floor = 930, px = cm * 4.1
+    ctx.strokeStyle = '#1b1b1a'; ctx.lineWidth = 1; ctx.fillStyle = '#1b1b1a'; ctx.font = font(14)
+    for (let c = 50; c <= 190; c += 10) { const y = floor - c * 4.1; ctx.beginPath(); ctx.moveTo(1240, y); ctx.lineTo(c % 50 ? 1252 : 1270, y); ctx.stroke(); if (!(c % 50)) { ctx.textAlign = 'left'; ctx.fillText(c + ' cm', 1280, y + 5) } }
+    ctx.strokeStyle = '#1b1b1a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(300, floor); ctx.lineTo(1620, floor); ctx.stroke()
+    const figure = (x, h, r, color) => { const head = h * r; ctx.fillStyle = color; ctx.strokeStyle = color; ctx.lineCap = 'round'; const top = floor - h, sh = top + head * 1.15; ctx.beginPath(); ctx.arc(x, top + head / 2, head / 2, 0, 7); ctx.fill(); const hip = lerp(sh, floor, .46), bw = h * .1; ctx.lineWidth = bw * 1.6; ctx.beginPath(); ctx.moveTo(x, sh + bw * .7); ctx.lineTo(x, hip); ctx.stroke(); ctx.lineWidth = bw * .62; for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(x + s * bw * .8, sh + bw * .4); ctx.lineTo(x + s * bw * 1.5, hip + h * .03); ctx.stroke(); ctx.beginPath(); ctx.lineWidth = bw * .75; ctx.moveTo(x + s * bw * .5, hip); ctx.lineTo(x + s * bw * .75, floor - bw * .3); ctx.stroke(); ctx.lineWidth = bw * .62 } }
+    ages.slice(0, Math.max(0, i + 1)).forEach((a, n) => figure(430 + n * 130, a[1] * 4.1, a[2], `rgba(27,27,26,${.1 + n * .03})`))
+    figure(1060, px, ratio, '#101010')
+    ctx.strokeStyle = LIME; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(1040, floor - px); ctx.lineTo(1270, floor - px); ctx.stroke()
+    label(1280, floor - px - 14, Math.round(cm) + ' cm', '#111', 28, 600); label(60, 1036, 'AGE ' + Math.round(lerp(A[0], B[0], k)), '#111', 15)
+  } },
+  { d: 1.6, f(p) { // the skyline rises over Wall Street
+    const sky = ctx.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, '#c9d0d6'); sky.addColorStop(1, '#f2f3f3'); ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H)
+    const r = rng(21); const n = 26; ctx.save(); push(p, W / 2, H, .08)
+    for (let layer = 0; layer < 3; layer++) { let x = -40; while (x < W + 60) { const w = 60 + r() * 120, hMax = (220 + r() * 620) * (.72 + layer * .16), delay = r() * .45, h = hMax * outCubic(seg(p, delay, delay + .55)); const c = 150 - layer * 58; ctx.fillStyle = `rgb(${c},${c + 3},${c + 7})`; ctx.fillRect(x, H - h, w, h); ctx.fillStyle = `rgba(255,255,240,${.22 + layer * .08})`; for (let wy = H - h + 12; wy < H; wy += 22) for (let wx = x + 8; wx < x + w - 8; wx += 16) if ((Math.sin(wx * 12.3 + wy * 7.1) + 1) > .9) ctx.fillRect(wx, wy, 8, 12); x += w + 4 } }
+    ctx.restore(); void n
+    ctx.fillStyle = '#0d6b3c'; ctx.fillRect(1350, 760, 340, 92); ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.strokeRect(1358, 768, 324, 76); label(1520, 824, 'WALL ST', '#fff', 50, 650, 'center'); ctx.fillStyle = '#2d3134'; ctx.fillRect(1510, 852, 20, 228)
+    label(60, 1036, 'NEW YORK', '#fff')
+  } },
+  { d: 1.4, f(p) { // the market climbs
+    bg('#050706'); const r = rng(52), n = 44, w = 40; let v = 900
+    ctx.strokeStyle = '#141916'; ctx.lineWidth = 1; for (let y = 90; y < 980; y += 90) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke() }
+    const shown = outCubic(p) * n
+    for (let i = 0; i < shown; i++) { const o = v, c = o - 22 + r() * 22 - (r() > .75 ? -32 : 0) - 8; const hi = Math.min(o, c) - r() * 16, lo = Math.max(o, c) + r() * 16; const up = c < o, x = 30 + i * w; ctx.strokeStyle = ctx.fillStyle = up ? '#5fd13d' : '#e5533d'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x + 13, hi); ctx.lineTo(x + 13, lo); ctx.stroke(); ctx.fillRect(x, Math.min(o, c), 26, Math.max(3, Math.abs(o - c))); v = c }
+    ctx.fillStyle = '#0f1311'; ctx.fillRect(0, 1000, W, 80); const names = ['ALD', 'MAP', 'ELM', 'OAK', 'FIR', 'ASH', 'YEW', 'BAY', 'IVY', 'PIN']; for (let i = 0; i < 18; i++) { const x = (i * 240 - p * 500) % (240 * 18); label(x < -200 ? x + 240 * 18 : x, 1050, names[i % 10] + ' ▲', '#7fd92a', 28, 600) }
+  } },
+  { d: 1.6, f(p) { // NEAR: the network grows and one line climbs out of it
+    bg('#040504'); const r = rng(88), nodes = []; for (let i = 0; i < 150; i++) nodes.push({ x: r() * W, y: r() * H, b: r() * .75 })
+    ctx.lineWidth = 1; for (let i = 0; i < nodes.length; i++) { const a = nodes[i], ka = seg(p, a.b, a.b + .2); if (!ka) continue; for (let j = 0; j < i; j++) { const b = nodes[j]; const d = Math.hypot(a.x - b.x, a.y - b.y); if (d < 190) { ctx.strokeStyle = `rgba(134,224,30,${.2 * ka * (1 - d / 190)})`; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke() } } ctx.fillStyle = `rgba(190,245,120,${ka})`; ctx.beginPath(); ctx.arc(a.x, a.y, 2.5 + ka * 2, 0, 7); ctx.fill() }
+    label(960, 590, 'NEAR', `rgba(255,255,255,${outCubic(seg(p, 0, .3))})`, 150, 600, 'center')
+    const curve = nearCurve(), upto = outCubic(p) * (curve.length - 1)
+    ctx.strokeStyle = LIME; ctx.lineWidth = 7; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.shadowColor = LIME; ctx.shadowBlur = 22; ctx.beginPath(); for (let i = 0; i <= upto; i++) i ? ctx.lineTo(curve[i][0], curve[i][1]) : ctx.moveTo(curve[i][0], curve[i][1]); ctx.stroke(); ctx.shadowBlur = 0
+  } },
+  { d: 1.1, f(p) { // the line is pulled into a single point
+    bg('#000'); const curve = nearCurve(), P = inOut(p), tail = Math.floor(P * (curve.length - 1)), head = curve[curve.length - 1]
+    const end = logoDot(); const x = lerp(head[0], end.cx, P), y = lerp(head[1], end.cy, P), s = lerp(14, end.s, P)
+    ctx.strokeStyle = LIME; ctx.lineWidth = 7 * (1 - P * .6); ctx.lineCap = 'round'; ctx.shadowColor = LIME; ctx.shadowBlur = 20
+    ctx.globalAlpha = 1 - P; ctx.beginPath(); for (let i = tail; i < curve.length; i++) i === tail ? ctx.moveTo(curve[i][0], curve[i][1]) : ctx.lineTo(curve[i][0], curve[i][1]); ctx.lineTo(x, y); ctx.stroke(); ctx.globalAlpha = 1; ctx.shadowBlur = 0
+    ctx.fillStyle = LIME; ctx.fillRect(x - s / 2, y - s / 2, s, s)
+  } },
+  { d: 6, f(p, t) { // grow.
+    bg('#000'); const G = logoGeom(), reveal = inOut(seg(t, .25, 1.35))
+    ctx.save(); ctx.translate(G.x, G.y); ctx.scale(G.k, G.k)
+    ctx.save(); const dotLeft = 2676.9; ctx.beginPath(); ctx.rect(dotLeft - 2700 * reveal, -200, 2700 * reveal, 1300); ctx.clip(); ctx.translate((1 - reveal) * 420, 0); ctx.fillStyle = LIME; ctx.fill(G.letters); ctx.restore()
+    ctx.fillStyle = LIME; ctx.fill(G.dot)
+    ctx.restore()
+    const D = logoDot(), g = seg(t, 1.25, 3.1), h = 148 * outCubic(g), sway = Math.sin(t * 1.5) * .025 * outCubic(g)
+    if (g > 0) {
+      ctx.save(); ctx.translate(D.cx, D.cy - D.s / 2 + 2); ctx.rotate(sway)
+      ctx.strokeStyle = '#7fbf3a'; ctx.lineCap = 'round'; ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(7, -h * .5, 0, -h); ctx.stroke()
+      ctx.translate(0, -h); const k = outBack(seg(t, 1.9, 3.2))
+      for (const s of [-1, 1]) { ctx.save(); ctx.rotate(s * .95); const grad = ctx.createLinearGradient(-30, -110, 30, 0); grad.addColorStop(0, '#a2e545'); grad.addColorStop(1, '#4f9c20'); if (k > 0) leafShape(112 * k, s, grad, 'rgba(40,90,20,.45)'); ctx.restore() }
+      ctx.restore()
+    }
+    const so = outCubic(seg(t, 2.8, 3.8)); ctx.globalAlpha = so; label(960, 788 + (1 - so) * 16, 'Everything great was once a seed.', '#f2f5ee', 44, 450, 'center'); ctx.globalAlpha = 1
+    const fade = seg(t, 5.55, 6); if (fade) { ctx.fillStyle = `rgba(0,0,0,${fade})`; ctx.fillRect(0, 0, W, H) }
+  } },
+]
+function logoGeom() { return cache.logo ??= (() => { const subs = window.LOGO_D.split(/(?=M)/); const k = 820 / 2829.56; return { k, x: (W - 820) / 2, y: 340, letters: new Path2D(subs.slice(0, -1).join('')), dot: new Path2D(subs[subs.length - 1]) } })() }
+function logoDot() { const G = logoGeom(); const s = 152.7 * G.k; return { cx: G.x + (2676.9 + 76.35) * G.k, cy: G.y + (483.7 + 71.65) * G.k, s } }
+function nearCurve() { return cache.curve ??= (() => { const r = rng(61), a = []; let v = 870; for (let i = 0; i <= 80; i++) { v += (r() - .5) * 36 - 3 - (i / 80) ** 3 * 22; a.push([120 + i * 21, Math.max(90, v)]) } return a })() }
+
+const total = scenes.reduce((n, s) => n + s.d, 0)
+function draw(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.shadowBlur = 0
+  let a = 0
+  for (const s of scenes) { if (t < a + s.d || s === scenes[scenes.length - 1]) { ctx.save(); s.f(clamp((t - a) / s.d), t - a); ctx.restore(); return } a += s.d }
+}
+window.INTRO = { total, draw, cuts: scenes.map((s, i) => scenes.slice(0, i).reduce((n, x) => n + x.d, 0)), frame: (t, q = .94) => { draw(t); return document.getElementById('c').toDataURL('image/jpeg', q).split(',')[1] } }
+</script></body></html>
