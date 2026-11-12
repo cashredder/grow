@@ -1,0 +1,30 @@
+{
+  "name": "grow-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8788",
+    "deploy": "wrangler deploy --env production",
+    "db:local": "wrangler d1 execute grow --local --file=schema.sql",
+    "db:remote": "wrangler d1 execute grow --remote --env production --file=schema.sql",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@noble/curves": "^1.9.0",
+    "@noble/hashes": "^1.8.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261104.1",
+    "@near-js/crypto": "^2.0.0",
+    "@near-js/transactions": "^2.0.0",
+    "@types/node": "^22.20.5",
+    "typescript": "^5.8.0",
+    "vitest": "^4.0.0",
+    "wrangler": "^4.150.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "workerd@1.20261104.1": true
+  }
+}

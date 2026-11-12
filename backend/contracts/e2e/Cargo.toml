@@ -1,0 +1,15 @@
+[package]
+name = "grow-e2e"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# End-to-end tests on a local NEAR sandbox node with the real wasm contracts (built by `cargo near build`).
+# Not part of the contracts workspace: near-workspaces is large and only CI runs these.
+[workspace]
+
+[dev-dependencies]
+near-workspaces = "0.24"
+tokio = { version = "1", features = ["full"] }
+serde_json = "1"
+anyhow = "1"
