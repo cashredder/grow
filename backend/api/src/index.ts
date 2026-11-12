@@ -117,6 +117,11 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       return json({ source: env.TX_API_URL ? 'accounts' : 'blocks', state: state.results, jobs: jobs.results, failed: failed.results })
     }
     if (m === 'GET' && seg[1] === 'price') return json({ price: await fetchNearUsd() })
+    // Moderation: a hidden token stays on chain and on its own page, but leaves lists, the feed and stats.
+    if (m === 'POST' && seg[1] === 'tokens' && seg[2] && (seg[3] === 'hide' || seg[3] === 'show')) {
+      const r = await env.DB.prepare('UPDATE tokens SET hidden = ? WHERE id = ?').bind(seg[3] === 'hide' ? 1 : 0, decodeURIComponent(seg[2])).run()
+      return json({ ok: r.meta.changes > 0 })
+    }
     if (m === 'GET' && seg[1] === 'probe') {
       // Which public endpoints answer from this worker (they limit shared Cloudflare addresses differently).
       const urls = (new URL(req.url).searchParams.get('urls') || '').split(',').filter((u) => u.startsWith('https://')).slice(0, 8)

@@ -88,7 +88,7 @@ export async function handleV1(req: Request, env: Env, url: URL): Promise<Respon
   }
 
   if (parts[0] === 'stats') {
-    const s = await db.prepare("SELECT COUNT(*) AS tokens, COALESCE(SUM(mcap), 0) AS cap, COALESCE(SUM(holders), 0) AS holders, COALESCE(SUM(volume), 0) AS volume FROM tokens WHERE phase IN ('Curve', 'Pool')").first<{ tokens: number; cap: number; holders: number; volume: number }>()
+    const s = await db.prepare("SELECT COUNT(*) AS tokens, COALESCE(SUM(mcap), 0) AS cap, COALESCE(SUM(holders), 0) AS holders, COALESCE(SUM(volume), 0) AS volume FROM tokens WHERE phase IN ('Curve', 'Pool') AND hidden = 0").first<{ tokens: number; cap: number; holders: number; volume: number }>()
     return json({ ...s, near_usd: await nearUsd(env) })
   }
 
@@ -97,7 +97,7 @@ export async function handleV1(req: Request, env: Env, url: URL): Promise<Respon
     const q = (url.searchParams.get('q') || '').trim().toLowerCase().slice(0, 40)
     const limit = num(url.searchParams.get('limit'), 50, 1, 100)
     const offset = num(url.searchParams.get('offset'), 0, 0, 10_000)
-    const where: string[] = ["phase IN ('Curve', 'Pool')"]
+    const where: string[] = ["phase IN ('Curve', 'Pool')", 'hidden = 0']
     const args: unknown[] = []
     if (q) {
       where.push('(LOWER(name) LIKE ? OR LOWER(ticker) LIKE ? OR id = ? OR account = ?)')
@@ -179,8 +179,8 @@ export async function handleV1(req: Request, env: Env, url: URL): Promise<Respon
   }
 
   if (parts[0] === 'feed') {
-    const r = await db.prepare('SELECT t.token_id, k.ticker, t.account, t.side, t.near, t.tokens, t.ts FROM trades t JOIN tokens k ON k.id = t.token_id ORDER BY t.id DESC LIMIT 30').all()
-    const n = await db.prepare("SELECT id AS token_id, ticker, creator AS account, 'new' AS side, created_ts AS ts FROM tokens ORDER BY created_ts DESC LIMIT 10").all()
+    const r = await db.prepare('SELECT t.token_id, k.ticker, t.account, t.side, t.near, t.tokens, t.ts FROM trades t JOIN tokens k ON k.id = t.token_id WHERE k.hidden = 0 ORDER BY t.id DESC LIMIT 30').all()
+    const n = await db.prepare("SELECT id AS token_id, ticker, creator AS account, 'new' AS side, created_ts AS ts FROM tokens WHERE hidden = 0 ORDER BY created_ts DESC LIMIT 10").all()
     const all = [...r.results, ...n.results].sort((a, b) => Number((b as { ts: number }).ts) - Number((a as { ts: number }).ts)).slice(0, 30)
     return json({ feed: all })
   }
@@ -188,7 +188,7 @@ export async function handleV1(req: Request, env: Env, url: URL): Promise<Respon
   if (parts[0] === 'leaderboard') {
     const tab = url.searchParams.get('tab') || 'traders'
     if (tab === 'devs') {
-      const r = await db.prepare("SELECT creator AS account, COUNT(*) AS tokens, SUM(mcap) AS cap FROM tokens WHERE phase IN ('Curve', 'Pool') GROUP BY creator ORDER BY cap DESC LIMIT 15").all()
+      const r = await db.prepare("SELECT creator AS account, COUNT(*) AS tokens, SUM(mcap) AS cap FROM tokens WHERE phase IN ('Curve', 'Pool') AND hidden = 0 GROUP BY creator ORDER BY cap DESC LIMIT 15").all()
       return json({ devs: r.results })
     }
     if (tab === 'gardeners') {

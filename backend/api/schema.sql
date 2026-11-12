@@ -18,7 +18,7 @@ CREATE INDEX IF NOT EXISTS events_block ON events (block);
 CREATE TABLE IF NOT EXISTS tokens (
   id TEXT PRIMARY KEY, account TEXT NOT NULL UNIQUE, name TEXT NOT NULL, ticker TEXT NOT NULL,
   creator TEXT NOT NULL, co_dev TEXT, split_bps INTEGER NOT NULL DEFAULT 10000,
-  reference TEXT, image TEXT, description TEXT, x TEXT, telegram TEXT, website TEXT, meta_done INTEGER NOT NULL DEFAULT 0,
+  reference TEXT, image TEXT, description TEXT, x TEXT, telegram TEXT, website TEXT, meta_done INTEGER NOT NULL DEFAULT 0, hidden INTEGER NOT NULL DEFAULT 0,
   fee_bps INTEGER NOT NULL, redirect_pct INTEGER NOT NULL DEFAULT 0, redirect_to TEXT NOT NULL DEFAULT 'holders',
   dev_vault INTEGER, phase TEXT NOT NULL,
   near_reserve_raw TEXT NOT NULL, tok_reserve_raw TEXT NOT NULL, burned_raw TEXT NOT NULL DEFAULT '0',
