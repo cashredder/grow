@@ -98,9 +98,11 @@ async function attested(env: Env, model: string, address: string): Promise<boole
     if (res.ok) {
       const text = await res.text()
       reportHash = await sha256Hex(text)
-      const r = JSON.parse(text) as { gateway_attestation?: { signing_address?: string; report_data?: string; intel_quote?: string }; model_attestations?: { signing_address?: string; report_data?: string; intel_quote?: string }[] }
-      const reports = [r.gateway_attestation, ...(r.model_attestations ?? [])].filter(Boolean) as { signing_address?: string; report_data?: string; intel_quote?: string }[]
-      ok = reports.some((a) => a.signing_address?.toLowerCase() === address.toLowerCase() && !!a.intel_quote && (a.report_data ?? '').toLowerCase().endsWith(nonce))
+      const r = JSON.parse(text) as { gateway_attestation?: { signing_address?: string; report_data?: string; intel_quote?: string }; model_attestations?: { signing_address?: string; request_nonce?: string; intel_quote?: string }[] }
+      const reports = [r.gateway_attestation, ...(r.model_attestations ?? [])].filter(Boolean) as { signing_address?: string; report_data?: string; request_nonce?: string; intel_quote?: string }[]
+      // The gateway report carries our nonce at the end of report_data; model reports name it as request_nonce.
+      const fresh = (a: { report_data?: string; request_nonce?: string }) => (a.report_data ?? '').toLowerCase().endsWith(nonce) || (a.request_nonce ?? '').toLowerCase() === nonce
+      ok = reports.some((a) => a.signing_address?.toLowerCase() === address.toLowerCase() && !!a.intel_quote && fresh(a))
     }
   } catch {
     ok = false

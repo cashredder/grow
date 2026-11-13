@@ -14,7 +14,12 @@ export class Clock {
   private ticks = 0
   constructor(private state: DurableObjectState, private env: Env) {}
 
-  async fetch(): Promise<Response> {
+  async fetch(req?: Request): Promise<Response> {
+    // Which NEAR AI key this clock instance holds (first characters only), to spot an instance with stale settings.
+    if (req && new URL(req.url).pathname === '/key') {
+      const k = (this.env.NEARAI_KEY || '').trim()
+      return new Response(k ? `${k.slice(0, 4)}… (${k.length})` : 'none')
+    }
     if ((await this.state.storage.getAlarm()) == null) await this.state.storage.setAlarm(Date.now() + 100)
     return new Response('wound')
   }

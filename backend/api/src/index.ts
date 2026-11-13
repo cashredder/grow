@@ -121,14 +121,16 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
     // Which NEAR AI key the worker uses (only its first characters) and what NEAR AI says about it.
     if (m === 'GET' && seg[1] === 'nearai') {
       const key = (env.NEARAI_KEY || '').trim()
-      const probe = async (path: string, body?: unknown) => {
-        const r = await fetch(`${aiBase(env)}${path}`, { method: body ? 'POST' : 'GET', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
+      const probe = async (path: string, body?: unknown, extra: Record<string, string> = {}) => {
+        const r = await fetch(`${aiBase(env)}${path}`, { method: body ? 'POST' : 'GET', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', ...extra }, body: body ? JSON.stringify(body) : undefined })
         return `${r.status} ${(await r.text()).slice(0, 300)}`
       }
       return json({
         key: key ? `${key.slice(0, 4)}… (${key.length} chars)` : null,
         base: aiBase(env),
         chat: key ? await probe('/chat/completions', { model: env.AI_MODEL || 'z-ai/glm-5.3-flash', messages: [{ role: 'user', content: 'Say OK' }], max_tokens: 5 }) : null,
+        chat_no_alias: key ? await probe('/chat/completions', { model: env.AI_MODEL || 'z-ai/glm-5.3-flash', messages: [{ role: 'user', content: 'Say OK' }], max_tokens: 5 }, { 'x-no-aliasing': 'true', 'Accept-Encoding': 'identity' }) : null,
+        clock: await env.CLOCK.get(env.CLOCK.idFromName('clock')).fetch('https://clock/key').then((r) => r.text()).catch((e) => String(e)),
       })
     }
     // Moderation: a hidden token stays on chain and on its own page, but leaves lists, the feed and stats.
