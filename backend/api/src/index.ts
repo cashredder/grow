@@ -13,7 +13,7 @@
 // The scheduled trigger (every minute) only keeps the clock wound; the clock does the work (clock.ts).
 import type { Env } from './env'
 import { fetchNearUsd } from './lib/price'
-import { aiBase } from './agents/nearai'
+import { aiBase, attested, DEFAULT_MODEL } from './agents/nearai'
 import { cors, fail, HttpError, json } from './http'
 import { handleV1 } from './routes/v1'
 import { handleAgent } from './routes/agent'
@@ -118,6 +118,10 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       return json({ source: env.TX_API_URL ? 'accounts' : 'blocks', state: state.results, jobs: jobs.results, failed: failed.results })
     }
     if (m === 'GET' && seg[1] === 'price') return json({ price: await fetchNearUsd() })
+    // Re-checks that a signer is named in a fresh NEAR AI attestation report (and refreshes the cached result).
+    if (m === 'GET' && seg[1] === 'attest' && seg[2]) {
+      return json({ address: seg[2], attested: await attested(env, env.AI_MODEL || DEFAULT_MODEL, seg[2], true) })
+    }
     // Which NEAR AI key the worker uses (only its first characters) and what NEAR AI says about it.
     if (m === 'GET' && seg[1] === 'nearai') {
       const key = (env.NEARAI_KEY || '').trim()

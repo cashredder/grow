@@ -82,10 +82,10 @@ async function signatureOf(env: Env, chatId: string): Promise<{ text: string; si
  * Whether `address` is the signer named in a fresh NEAR AI attestation report for `model`, bound to our
  * nonce (the last 32 bytes of report_data). Cached for a few hours per address.
  */
-async function attested(env: Env, model: string, address: string): Promise<boolean> {
+export async function attested(env: Env, model: string, address: string, fresh = false): Promise<boolean> {
   const key = `att:${address.toLowerCase()}`
   const cached = await env.DB.prepare('SELECT value FROM ix_state WHERE key = ?').bind(key).first<{ value: string }>()
-  if (cached) {
+  if (cached && !fresh) {
     const [ts, ok] = cached.value.split(':')
     if (Date.now() - Number(ts) < ATTEST_EVERY_MS) return ok === '1'
   }
