@@ -13,6 +13,7 @@
 // The scheduled trigger (every minute) only keeps the clock wound; the clock does the work (clock.ts).
 import type { Env } from './env'
 import { fetchNearUsd } from './lib/price'
+import { aiBase } from './agents/nearai'
 import { cors, fail, HttpError, json } from './http'
 import { handleV1 } from './routes/v1'
 import { handleAgent } from './routes/agent'
@@ -117,6 +118,19 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       return json({ source: env.TX_API_URL ? 'accounts' : 'blocks', state: state.results, jobs: jobs.results, failed: failed.results })
     }
     if (m === 'GET' && seg[1] === 'price') return json({ price: await fetchNearUsd() })
+    // Which NEAR AI key the worker uses (only its first characters) and what NEAR AI says about it.
+    if (m === 'GET' && seg[1] === 'nearai') {
+      const key = (env.NEARAI_KEY || '').trim()
+      const probe = async (path: string, body?: unknown) => {
+        const r = await fetch(`${aiBase(env)}${path}`, { method: body ? 'POST' : 'GET', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
+        return `${r.status} ${(await r.text()).slice(0, 300)}`
+      }
+      return json({
+        key: key ? `${key.slice(0, 4)}… (${key.length} chars)` : null,
+        base: aiBase(env),
+        chat: key ? await probe('/chat/completions', { model: env.AI_MODEL || 'z-ai/glm-5.3-flash', messages: [{ role: 'user', content: 'Say OK' }], max_tokens: 5 }) : null,
+      })
+    }
     // Moderation: a hidden token stays on chain and on its own page, but leaves lists, the feed and stats.
     if (m === 'POST' && seg[1] === 'tokens' && seg[2] && (seg[3] === 'hide' || seg[3] === 'show')) {
       const r = await env.DB.prepare('UPDATE tokens SET hidden = ? WHERE id = ?').bind(seg[3] === 'hide' ? 1 : 0, decodeURIComponent(seg[2])).run()

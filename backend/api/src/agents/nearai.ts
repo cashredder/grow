@@ -14,7 +14,9 @@ import { keccak_256 } from '@noble/hashes/sha3'
 import type { Env } from '../env'
 import { sha256Hex } from '../http'
 
-const API = 'https://cloud-api.near.ai/v1'
+/** NEAR AI's OpenAI-compatible base URL; AI_BASE_URL overrides it (keys from other NEAR AI programmes may use another host). */
+const DEFAULT_API = 'https://cloud-api.near.ai/v1'
+export const aiBase = (env: Env) => (env.AI_BASE_URL || DEFAULT_API).replace(/\/+$/, '')
 export const DEFAULT_MODEL = 'z-ai/glm-5.3-flash'
 const ATTEST_EVERY_MS = 6 * 3_600_000
 
@@ -63,7 +65,7 @@ export const signedTexts = (model: string, requestHash: string, responseHash: st
 
 async function signatureOf(env: Env, chatId: string): Promise<{ text: string; signature: string; signing_address: string } | null> {
   for (let i = 0; i < 4; i++) {
-    const res = await fetch(`${API}/signature/${encodeURIComponent(chatId)}?signing_algo=ecdsa`, { headers: { Accept: 'application/json', Authorization: `Bearer ${env.NEARAI_KEY!.trim()}` } })
+    const res = await fetch(`${aiBase(env)}/signature/${encodeURIComponent(chatId)}?signing_algo=ecdsa`, { headers: { Accept: 'application/json', Authorization: `Bearer ${env.NEARAI_KEY!.trim()}` } })
     if (res.status === 404) {
       await sleep(500 * (i + 1))
       continue
@@ -88,7 +90,7 @@ async function attested(env: Env, model: string, address: string): Promise<boole
     if (Date.now() - Number(ts) < ATTEST_EVERY_MS) return ok === '1'
   }
   const nonce = hex(crypto.getRandomValues(new Uint8Array(32)))
-  const url = `${API}/attestation/report?signing_algo=ecdsa&nonce=${nonce}&model=${encodeURIComponent(model)}&provider=near&include_tls_fingerprint=false`
+  const url = `${aiBase(env)}/attestation/report?signing_algo=ecdsa&nonce=${nonce}&model=${encodeURIComponent(model)}&provider=near&include_tls_fingerprint=false`
   let ok = false
   let reportHash = ''
   try {
@@ -112,7 +114,7 @@ export async function askNearAi(env: Env, system: string, user: string): Promise
   const model = env.AI_MODEL || DEFAULT_MODEL
   const request = JSON.stringify({ model, messages: [{ role: 'system', content: system }, { role: 'user', content: user }], temperature: 0.2, max_tokens: 1500 })
   try {
-    const res = await fetch(`${API}/chat/completions`, {
+    const res = await fetch(`${aiBase(env)}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.NEARAI_KEY!.trim()}`, 'x-no-aliasing': 'true', 'Accept-Encoding': 'identity' },
       body: request,

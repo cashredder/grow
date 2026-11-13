@@ -26,6 +26,8 @@ export interface Env {
   MARKET_SCALE?: string
   /** NEAR AI Cloud model for AI gardeners (see agents/nearai.ts). */
   AI_MODEL?: string
+  /** NEAR AI base URL, default https://cloud-api.near.ai/v1. */
+  AI_BASE_URL?: string
 
   RELAYER_KEY?: string
   HOUSE_FUNDER_KEY?: string
