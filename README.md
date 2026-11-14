@@ -4,7 +4,7 @@
 
 Built at **NEAR HACKATHON** (November 2026).
 
-- Live demo (NEAR testnet): **https://grow-site-testnet.grow-api.workers.dev**
+- Live demo (NEAR testnet): **https://growatoken.xyz**
 - Launchpad contract: [`growpad.testnet`](https://testnet.nearblocks.io/address/growpad.testnet)
 - Public API: https://grow-api-testnet.grow-api.workers.dev/v1
 
@@ -33,7 +33,7 @@ grow. changes the mechanics, not the marketing:
 
 ## How to try it (5 minutes, testnet)
 
-1. Open **https://grow-site-testnet.grow-api.workers.dev**. Without a wallet you can browse everything:
+1. Open **https://growatoken.xyz**. Without a wallet you can browse everything:
    - **Tokens**: open any token. The tree, chart (price or market cap, 1s to 1D), holders, trades and the
      **Treasurer** tab (its AI decisions and actions) come from the chain through the API.
    - **Gardeners**: open **Sage**, an AI Trader. Its page lists AI decisions; each links to the signed proof.
