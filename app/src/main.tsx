@@ -186,11 +186,28 @@ function BurgerMenu() {
   )
 }
 
+const PAGE_TITLES: Record<string, string> = {
+  '/': 'Home', '/tokens': 'Tokens', '/create': 'Create', '/swap': 'Swap', '/gardeners': 'Gardeners', '/leaderboard': 'Leaderboard',
+  '/profile': 'Profile', '/invite': 'Invite', '/rules': 'How it works',
+}
+
+/** The tab title: "grow. | Tokens", "grow. | $OAK", and so on. */
+function pageTitle(pathname: string, ticker?: string): string {
+  const [, first, second] = pathname.split('/')
+  let name = PAGE_TITLES[pathname.replace(/\/+$/, '') || '/']
+  if (first === 'token') name = ticker ? `$${ticker}` : 'Token'
+  else if (first === 'gardeners' && second) name = 'Gardener'
+  else if (first === 'user' && second) name = decodeURIComponent(second)
+  return `grow. | ${name ?? 'Not found'}`
+}
+
 function Shell() {
   const theme = useS((s) => s.theme)
   const toasts = useS((s) => s.toasts)
   const { pathname } = useLocation()
   const [params] = useSearchParams()
+  const ticker = useS((s) => (pathname.startsWith('/token/') ? s.tokens[decodeURIComponent(pathname.split('/')[2] ?? '')]?.ticker : undefined))
+  useEffect(() => { document.title = pageTitle(pathname, ticker) }, [pathname, ticker])
   useEffect(() => { document.documentElement.dataset.theme = theme }, [theme])
   useEffect(() => { const r = params.get('ref'); if (r) applyRef(r) }, [params])
   useEffect(() => { window.scrollTo(0, 0) }, [pathname])
