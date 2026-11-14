@@ -102,7 +102,7 @@ until 2026-11-12 and were merged here with their full history).
 - **Libraries**: near-sdk, uint, near-workspaces, tokio (contracts); Cloudflare Workers, Wrangler, D1, Durable
   Objects, @noble/curves, @noble/hashes, Vitest (API); React, React Router, Vite, NEAR Wallet Selector,
   @near-js/* , buffer, Instrument Sans (site).
-- **AI-assisted**: the code was written with Claude Code (Anthropic) under the team's direction.
+- **AI-assisted**: the code was written with AI coding assistants under the team's direction.
 
 ## Status and honest limits
 
